@@ -387,6 +387,15 @@ button.ghost.x {
   font-size: 14px
 }
 
+.savebar-spacer {
+  height: 80px
+}
+
+.savebar-actions {
+  display: flex;
+  gap: 10px
+}
+
 button.primary {
   font: inherit;
   font-weight: 650;

@@ -8,6 +8,7 @@ import { AfdelingsIndsigt } from "./pages/AfdelingsIndsigt";
 import { MinPeriode } from "./pages/MinPeriode";
 import { AfdelingsOverblik } from "./pages/AfdelingsOverblik";
 import { Settings } from "./pages/settings/Settings";
+import { confirmDiscard } from "./pages/settings/shared";
 import { MinTid } from "./pages/mintid/MinTid";
 import { useMinTid } from "./pages/mintid/useMinTid";
 
@@ -108,5 +109,5 @@ export function App() {
   return <div className="page">{newVersion && <div className="nyversion" role="status"><span>🔄 Der er en ny version af Topas Tid klar.</span><button className="primary" onClick={() => location.reload()}>Opdatér nu</button></div>}<header><div className="brand"><div className="logo">⏱️</div><h1>Topas Tid <span className="badge">Beta</span></h1></div><div className="user"><span>{emp.name}</span><div className="avatar">{initials(emp.name)}</div><button className="linkbtn" onClick={() => setChangingPassword(true)}>Skift password</button><button className="linkbtn" onClick={() => {
           signOutNow();
           location.reload();
-        }}>Log ud</button></div></header><nav className="tabs">{tabs.map(([key, label]) => <button className={"tab" + (tab === key ? " sel" : "")} onClick={() => setTab(key)} key={key}>{label}</button>)}</nav>{tab === "periode" && <MinPeriode boot={boot} />}{tab === "afdeling" && <AfdelingsIndsigt emp={emp} />}{tab === "okonomi" && <AfdelingsOverblik emp={emp} flash={flash} />}{tab === "fakturering" && <Fakturering flash={flash} />}{tab === "fravaer" && <FravaerLoen />}{tab === "admin" && <Settings flash={flash} emp={emp} onChanged={async () => setBoot(await api.bootstrap())} />}{tab === "tid" && <MinTid mt={mt} period={period} boot={boot} setBoot={setBoot} emp={emp} periods={periods} flash={flash} />}{toast && <div className="toast">{toast}</div>}</div>;
+        }}>Log ud</button></div></header><nav className="tabs">{tabs.map(([key, label]) => <button className={"tab" + (tab === key ? " sel" : "")} onClick={() => confirmDiscard() && setTab(key)} key={key}>{label}</button>)}</nav>{tab === "periode" && <MinPeriode boot={boot} />}{tab === "afdeling" && <AfdelingsIndsigt emp={emp} />}{tab === "okonomi" && <AfdelingsOverblik emp={emp} flash={flash} />}{tab === "fakturering" && <Fakturering flash={flash} />}{tab === "fravaer" && <FravaerLoen />}{tab === "admin" && <Settings flash={flash} emp={emp} onChanged={async () => setBoot(await api.bootstrap())} />}{tab === "tid" && <MinTid mt={mt} period={period} boot={boot} setBoot={setBoot} emp={emp} periods={periods} flash={flash} />}{toast && <div className="toast">{toast}</div>}</div>;
 }
