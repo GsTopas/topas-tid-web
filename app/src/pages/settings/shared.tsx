@@ -18,13 +18,24 @@ export const splitWeeklyNorm = (weekHours: unknown): number[] => {
   return [perDay, perDay, perDay, perDay, friday, 0, 0];
 };
 
-/** Tilfældigt midlertidigt password: "Topas-" + 10 tegn uden forvekslelige tegn (`qj`). */
+/**
+ * Tilfældigt midlertidigt password: "Topas-" + 10 tegn uden forvekslelige tegn (`qj`).
+ * Supabase Auth kræver mindst ét bogstav og ét tal, så der trækkes igen, indtil der er et tal
+ * (originalen gjorde ikke det, og ca. hvert 5. forsøg blev afvist).
+ */
 export const randomTempPassword = (): string => {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
   const buf = new Uint32Array(10);
-  crypto.getRandomValues(buf);
-  return "Topas-" + [...buf].map(r => alphabet[r % alphabet.length]).join("");
+  for (;;) {
+    crypto.getRandomValues(buf);
+    const pw = "Topas-" + [...buf].map(r => alphabet[r % alphabet.length]).join("");
+    if (meetsPasswordRules(pw)) return pw;
+  }
 };
+
+/** Supabase Auth's passwordregel: mindst 8 tegn, mindst ét bogstav (a–z/A–Z) og ét tal. */
+export const meetsPasswordRules = (pw: string): boolean =>
+  pw.length >= 8 && /[a-zA-Z]/.test(pw) && /[0-9]/.test(pw);
 
 /** Underfane-knap i Settings (`Jo`). */
 export function SubTab<T extends string>({
