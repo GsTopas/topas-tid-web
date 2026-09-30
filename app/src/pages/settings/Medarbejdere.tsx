@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../../lib/api";
 import { parseNum } from "../../lib/format";
-import { DEPARTMENTS, randomTempPassword, splitWeeklyNorm, sumNorm } from "./shared";
+import { DEPARTMENTS, SaveAllBar, keepDirty, randomTempPassword, saveDirtyRows, splitWeeklyNorm, sumNorm, useDirtyRows } from "./shared";
 
 type Employee = Awaited<ReturnType<typeof api.employeesAll>>[number];
 
@@ -59,18 +59,23 @@ export function Medarbejdere({ flash }: { flash: (msg: string) => void }) {
   const [rows, setRows] = useState<EmployeeRow[] | null>(null);
   const [draft, setDraft] = useState<NewEmployee | null>(null);
   const [pwInfo, setPwInfo] = useState("");
-  const load = () => api.employeesAll().then(list => setRows(list as EmployeeRow[]));
+  const [saving, setSaving] = useState(false);
+  const edits = useDirtyRows<EmployeeRow["id"]>();
+  // Ikke-gemte rækker bevares ved genindlæsning (fx efter "Opret login"); login-status kommer fra databasen.
+  const load = () => api.employeesAll().then(list =>
+    setRows(prev => keepDirty(list as EmployeeRow[], prev, edits.current(), (f, l) => ({ ...l, auth_user_id: f.auth_user_id }))));
   useEffect(() => {
     load();
   }, []);
   if (!rows) {
     return <p className="muted">Henter…</p>;
   }
-  const patch = (id: EmployeeRow["id"], changes: Partial<EmployeeRow>) =>
+  const patch = (id: EmployeeRow["id"], changes: Partial<EmployeeRow>) => {
     setRows(rows.map(d => d.id === id ? { ...d, ...changes } : d));
-  const save = async (p: EmployeeRow) => {
-    try {
-      await api.saveEmployee(p.id, {
+    edits.mark(id);
+  };
+  const saveOne = (p: EmployeeRow) =>
+    api.saveEmployee(p.id, {
         name: p.name,
         email: (p.email || "").trim().toLowerCase() || null,
         department: p.department || null,
@@ -83,11 +88,16 @@ export function Medarbejdere({ flash }: { flash: (msg: string) => void }) {
         flex_start: parseNum(String(p.flex_start ?? 0)) ?? 0,
         ...(normChanged(p) ? { weekly_norm: splitWeeklyNorm(parseNum(String(p.norm_uge))) } : {})
       });
-      flash(`${p.name} gemt ✓`);
-      load();
-    } catch (g) {
-      flash("❌ " + (g as Error).message);
-    }
+  const saveAll = async () => {
+    setSaving(true);
+    const failed = await saveDirtyRows(rows, edits.dirty, saveOne, flash);
+    edits.reset(failed);
+    setSaving(false);
+    load();
+  };
+  const undo = () => {
+    edits.reset();
+    api.employeesAll().then(list => setRows(list as EmployeeRow[]));
   };
   const manageLogin = async (p: EmployeeRow, action: "create" | "reset") => {
     const password = randomTempPassword();
@@ -100,7 +110,7 @@ export function Medarbejdere({ flash }: { flash: (msg: string) => void }) {
       flash("❌ " + (w as Error).message);
     }
   };
-  return <div>{pwInfo && <p className="ok pwinfo">🔑 {pwInfo} — skriv det ned, det vises kun her!</p>}<div className="tablewrap"><table className="datatable admin"><thead><tr><th>Navn</th><th>Mail</th><th>Afdeling</th><th className="num">Timepris</th><th>Startdato</th><th className="num">Lønnr.</th><th className="num" title="Flex-saldo ved start (timer, kan være negativ)">Start saldo</th><th className="num" title="Normtid pr. uge — sæt ned ved deltid. Fordeles automatisk man–fre">Norm/uge</th><th>Admin</th><th>Leder</th><th>Aktiv</th><th>Login</th><th /></tr></thead><tbody>{rows.map(p => <tr className={p.active ? "" : "inaktiv"} key={p.id}><td><input value={p.name} onChange={g => patch(p.id, {
+  return <div>{pwInfo && <p className="ok pwinfo">🔑 {pwInfo} — skriv det ned, det vises kun her!</p>}<div className="tablewrap"><table className="datatable admin"><thead><tr><th>Navn</th><th>Mail</th><th>Afdeling</th><th className="num">Timepris</th><th>Startdato</th><th className="num">Lønnr.</th><th className="num" title="Flex-saldo ved start (timer, kan være negativ)">Start saldo</th><th className="num" title="Normtid pr. uge — sæt ned ved deltid. Fordeles automatisk man–fre">Norm/uge</th><th>Admin</th><th>Leder</th><th>Aktiv</th><th>Login</th></tr></thead><tbody>{rows.map(p => <tr className={p.active ? "" : "inaktiv"} key={p.id}><td><input value={p.name} onChange={g => patch(p.id, {
                 name: g.target.value
               })} /></td><td><input value={p.email || ""} onChange={g => patch(p.id, {
                 email: g.target.value
@@ -122,7 +132,7 @@ export function Medarbejdere({ flash }: { flash: (msg: string) => void }) {
                 is_manager: g.target.checked
               })} /></td><td><input type="checkbox" checked={p.active} onChange={g => patch(p.id, {
                 active: g.target.checked
-              })} /></td><td>{p.auth_user_id ? <button className="ghost" onClick={() => manageLogin(p, "reset")}>Nulstil pw</button> : p.email ? <button className="ghost" onClick={() => manageLogin(p, "create")}>Opret login</button> : <span className="muted">mangler mail</span>}</td><td><button className="ghost" onClick={() => save(p)}>💾</button></td></tr>)}</tbody></table></div>{draft ? <div className="nyrow"><input placeholder="Navn" value={draft.name} onChange={p => setDraft({
+              })} /></td><td>{p.auth_user_id ? <button className="ghost" onClick={() => manageLogin(p, "reset")}>Nulstil pw</button> : p.email ? <button className="ghost" onClick={() => manageLogin(p, "create")}>Opret login</button> : <span className="muted">mangler mail</span>}</td></tr>)}</tbody></table></div><SaveAllBar count={edits.dirty.size} saving={saving} onSave={saveAll} onUndo={undo} />{draft ? <div className="nyrow"><input placeholder="Navn" value={draft.name} onChange={p => setDraft({
         ...draft,
         name: p.target.value
       })} /><input placeholder="mail@topas.dk" value={draft.email} onChange={p => setDraft({

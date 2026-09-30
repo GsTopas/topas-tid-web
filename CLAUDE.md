@@ -91,6 +91,7 @@ Departments are a hard-coded list: Marketing, Økonomi, Digital Transformation, 
 - Before pushing, run `npm run typecheck && npm test && npm run build` in `app/`.
 - For UI changes, keep the existing classNames and styles.css patterns (`page`, `pagehead`, `tabs`, `datatable`, `tablewrap`, `muted small`, `primary`, `ghost`, `toast`).
 - Show user feedback with `flash("✓ …" | "❌ …" | "⚠️ …")`.
+- Editable admin tables (Medarbejdere, Selskaber & projekter, Opgavetyper) have **no 💾 per row**. Edits mark the row dirty (`useDirtyRows` in `pages/settings/shared.tsx`), and one "💾 Gem alle" bar (`SaveAllBar`) saves only the changed rows. Rows that fail stay unsaved, and switching tab or leaving the page with unsaved edits asks first. Per-row actions such as "Opret login" / "Nulstil pw" stay on the row. New editable tables should follow the same pattern.
 - Known gaps (not yet fixed; see `docs/RECOVERY.md`):
   - 2027 periods are missing.
   - `saveDay` is not atomic and should become an RPC.
