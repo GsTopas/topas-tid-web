@@ -73,6 +73,7 @@ Departments are a hard-coded list: Marketing, Økonomi, Digital Transformation, 
   - *Why:* this mirrors the old paper and Excel sheet ("8–16 = 7,5 t").
   - Norm: `employees.weekly_norm` is a Mon..Sun array (default 7,5/7,5/7,5/7,5/7/0/0).
   - Days before `hired_date` are not counted as missing.
+- **Kontrol and ÅTD saldo** (Min periode / Medarbejder pr. periode): Kontrol per day = work hours + absence hours − the day's norm, only for days with a location. The ÅTD SALDO row = `employees.flex_start` ("Start saldo" in Settings) + the Kontrol sum from the first payroll period of the selected period's year to the end of the selected period (`api.atdSaldo`, `lib/saldo.ts`).
 - **Allocations** (`allocations`) split a day's work hours across companies and projects by task type. Several lines per day are allowed, and each save deletes and re-inserts the whole day. The day's status icon is 🟢 when the split equals the work hours, 🟠 when partial, and 🔴 when a past norm day is missing. **Task type is mandatory** (a DB trigger enforces it), except for Hotel & Administration or departments with no task types.
 - **Absence pay codes** (`absence_codes`, Lessor): Barn syg → 20 automatically (trigger), Andet fravær → 50 (firmabetalt, with a choice from `andet_fravaer_valg`) or 51 (egen betalt). Sickness (10 vs 13 § 56) and holiday (2200 vs 2300) are coded by Økonomi. **Holiday days are counted per Danish holiday year, 1 Sep–31 Aug.**
 - **Rebilling** (the core; see `api.ecoBilling`):

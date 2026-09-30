@@ -9,10 +9,12 @@ type Props = {
   cols: Col[];
   rows: Row[];
   footer?: Record<string, ReactNode> | null | false;
+  /** Ekstra sumrækker under footer (fx ÅTD saldo). */
+  extraFooter?: Record<string, ReactNode>[];
 };
 
-export function DataTable({ cols, rows, footer }: Props) {
+export function DataTable({ cols, rows, footer, extraFooter }: Props) {
   return <div className="tablewrap"><table className="datatable"><thead><tr>{cols.map(c => <th className={c.num ? "num" : ""} key={c.key}>{c.label}</th>)}</tr></thead><tbody>{rows.map((row, i) => <tr key={i}>{cols.map(c => {
             return <td className={(c.num ? "num " : "") + (row._cls?.[c.key] || "")} key={c.key}>{row[c.key] as ReactNode}</td>;
-          })}</tr>)}{footer && <tr className="foot">{cols.map(c => <td className={c.num ? "num" : ""} key={c.key}>{footer[c.key]}</td>)}</tr>}</tbody></table></div>;
+          })}</tr>)}{footer && <tr className="foot">{cols.map(c => <td className={c.num ? "num" : ""} key={c.key}>{footer[c.key]}</td>)}</tr>}{extraFooter?.map((f, i) => <tr className="foot extra" key={`x${i}`}>{cols.map(c => <td className={c.num ? "num" : ""} key={c.key}>{f[c.key]}</td>)}</tr>)}</tbody></table></div>;
 }
