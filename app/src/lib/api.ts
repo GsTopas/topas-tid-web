@@ -139,6 +139,16 @@ export interface DepartmentRpcRow {
   kr: number | null;
 }
 
+/** Rows from rpc department_shared_projects: totals per project × department × month. */
+export interface SharedProjectRow {
+  company_id: number;
+  comp_name: string;
+  department: string;
+  month: number;
+  hours: number;
+  kr: number;
+}
+
 export interface DepartmentBudget {
   company_id: number;
   period_type: string;
@@ -780,6 +790,19 @@ export const api = {
       budgets: budgets.map((b) => ({ ...b, comp_name: nameById[b.company_id] || "" })),
       plan: plan.map((p) => ({ ...p, comp_name: nameById[p.company_id] || "" })),
     };
+  },
+
+  /** Projekter afdelingen har timer på, med alle afdelingers timer + kr (kun totaler). */
+  async departmentShared(year: number, dept?: string | null): Promise<SharedProjectRow[]> {
+    const me = await currentEmployee();
+    const department = (me!.can_economy && dept) || me!.department;
+    if (!department) {
+      return [];
+    }
+    const rows = await q<SharedProjectRow>(
+      supabase.rpc("department_shared_projects", { p_year: year, p_dept: department }),
+    );
+    return rows.map((r) => ({ ...r, month: Number(r.month), hours: Number(r.hours), kr: Number(r.kr) }));
   },
 
   async ecoMatrix(
