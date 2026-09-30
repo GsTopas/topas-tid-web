@@ -1,5 +1,6 @@
 import type { PostgrestError } from "@supabase/supabase-js";
 import { supabase } from "./supabase";
+import { kontrolSum, type KontrolEntry } from "./saldo";
 
 // ---------------------------------------------------------------------------
 // Row types (match the selected column lists). Numeric DB columns are typed as
@@ -1307,6 +1308,28 @@ export const api = {
     if (error) {
       raise(error);
     }
+  },
+
+  /** ÅTD saldo: medarbejderens start saldo (flex_start) + sum af Kontrol fra `from` til `to`. */
+  async atdSaldo(from: string, to: string, employeeId: number): Promise<{ start: number; kontrol: number }> {
+    const [emps, entries] = await Promise.all([
+      q<{ flex_start: number | null; weekly_norm: WeeklyNorm | null }>(
+        supabase.from("employees").select("flex_start, weekly_norm").eq("id", employeeId),
+      ),
+      q<KontrolEntry>(
+        supabase
+          .from("day_entries")
+          .select("work_date, location, work_hours, absence_hours")
+          .eq("employee_id", employeeId)
+          .gte("work_date", from)
+          .lte("work_date", to),
+      ),
+    ]);
+    const emp = emps[0];
+    return {
+      start: Number(emp?.flex_start || 0),
+      kontrol: kontrolSum(entries, emp?.weekly_norm),
+    };
   },
 
   proxyEmployees: (): Promise<ProxyEmployee[]> =>
