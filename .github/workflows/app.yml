@@ -1,0 +1,58 @@
+# Bygger Topas Tid fra app/ og udgiver til GitHub Pages.
+# - Pull requests: kun typecheck, test og build (ingen udgivelse).
+# - Push til main: build, og udgivelse via GitHub Pages KUN når repo-variablen
+#   PAGES_FROM_ACTIONS = "true" er sat (Settings → Secrets and variables → Actions → Variables)
+#   OG Pages-kilden er "GitHub Actions" (Settings → Pages). Indtil da serverer Pages
+#   fortsat den gamle, håndcommittede build i roden af main — intet ændrer sig live.
+name: App
+
+on:
+  pull_request:
+    paths: ["app/**", ".github/workflows/app.yml"]
+  push:
+    branches: [main]
+    paths: ["app/**", ".github/workflows/app.yml"]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.PAGES_FROM_ACTIONS == 'true'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: app/dist
+
+  deploy:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.PAGES_FROM_ACTIONS == 'true'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
