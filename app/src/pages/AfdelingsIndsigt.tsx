@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
-import { api, type SessionEmployee } from "../lib/api";
+import { api, type SessionEmployee, type SharedProjectRow } from "../lib/api";
 import { fmtKr, fmtNum, MONTHS, parseNum } from "../lib/format";
 import { DataTable } from "../components/DataTable";
 
@@ -20,9 +20,12 @@ export function AfdelingsIndsigt({ emp }: { emp: SessionEmployee }) {
   const [month, setMonth] = useState(0);
   const [data, setData] = useState<DepartmentData | null>(null);
   const [sel, setSel] = useState<Selection | null>(null);
+  const [shared, setShared] = useState<SharedProjectRow[]>([]);
   const reload = () => {
     if (dept) {
       api.department(year, emp.can_economy ? dept : undefined).then(setData);
+      // Fælles projekter er et tillæg: fejler kaldet, vises siden bare uden.
+      api.departmentShared(year, emp.can_economy ? dept : undefined).then(setShared, () => setShared([]));
     }
   };
   useEffect(reload, [dept]);
@@ -70,6 +73,34 @@ export function AfdelingsIndsigt({ emp }: { emp: SessionEmployee }) {
       topTyper
     };
   }, [data, month]);
+  // Fælles projekter: kun projekter hvor mindst én anden afdeling har timer i den valgte periode.
+  const sharedProjects = useMemo(() => {
+    const own = data?.dept ?? dept;
+    const byComp = new Map<string, Map<string, { h: number; kr: number }>>();
+    for (const r of shared) {
+      if (month && r.month !== month) {
+        continue;
+      }
+      const depts = byComp.get(r.comp_name) ?? new Map<string, { h: number; kr: number }>();
+      const cur = depts.get(r.department) ?? { h: 0, kr: 0 };
+      cur.h += r.hours;
+      cur.kr += r.kr;
+      depts.set(r.department, cur);
+      byComp.set(r.comp_name, depts);
+    }
+    return [...byComp.entries()]
+      .filter(([, depts]) => [...depts.keys()].some(d => d !== own))
+      .map(([comp, depts]) => {
+        const lines = [...depts.entries()].map(([d, v]) => ({ dept: d, ...v })).sort((a, b) => b.h - a.h);
+        return {
+          comp,
+          lines,
+          h: lines.reduce((s, l) => s + l.h, 0),
+          kr: lines.reduce((s, l) => s + l.kr, 0)
+        };
+      })
+      .sort((a, b) => b.h - a.h);
+  }, [shared, month, data, dept]);
   const selStats = useMemo(() => {
     if (!sel || !stats) {
       return null;
@@ -151,7 +182,27 @@ export function AfdelingsIndsigt({ emp }: { emp: SessionEmployee }) {
           t: fmtNum(Number(r.hours)),
           note: r.task_note || ""
         }))} />{rows.length > 10 && <p className="muted small">…og {rows.length - 10} ældre linjer (se Alle linjer nederst)</p>}</div>;
-    })()}{data.budgets.length > 0 && <Fragment><h3>Timepuljer & årsplan</h3>{data.budgets.map(b => {
+    })()}{sharedProjects.length > 0 && <Fragment><h3>Fælles projekter med andre afdelinger</h3><p className="muted small">Projekter {data.dept} har timer på, hvor andre afdelinger også har registreret tid. Kun totaler pr. afdeling.</p>{sharedProjects.map(p => <div className="pulje" key={p.comp}><div className="puljehead"><strong>{p.comp}</strong><span className="muted">{fmtNum(p.h)} t · {fmtKr(p.kr)} kr i alt</span></div><DataTable cols={[{
+          key: "afd",
+          label: "Afdeling"
+        }, {
+          key: "t",
+          label: "Timer",
+          num: true
+        }, {
+          key: "kr",
+          label: "Kr",
+          num: true
+        }, {
+          key: "andel",
+          label: "Andel",
+          num: true
+        }]} rows={p.lines.map(l => ({
+          afd: l.dept === data.dept ? <b>{l.dept} (jer)</b> : l.dept,
+          t: fmtNum(l.h),
+          kr: fmtKr(l.kr),
+          andel: p.h > 0 ? `${Math.round(l.h / p.h * 100)} %` : ""
+        }))} /></div>)}</Fragment>}{data.budgets.length > 0 && <Fragment><h3>Timepuljer & årsplan</h3>{data.budgets.map(b => {
         // Månedspuljer ganges op til et helt år.
         const poolHours = Number(b.hours) * (b.period_type === "month" ? 12 : 1);
         const used = usedPerComp[b.comp_name] || 0;
