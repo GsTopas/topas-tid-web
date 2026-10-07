@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api, type Boot, type Period } from "../../lib/api";
 import { addDays, fmtNum, weekdayIdx } from "../../lib/format";
 import { fromDbAbsenceType } from "./constants";
 import { defaultTimeOut, inferLunchMin, workHours } from "./time";
+import { formChanged } from "./unsaved";
 import type { DayFormState, DayStatusMap, ProxyEmployee, WeeklyNorm } from "./types";
 
 /**
@@ -13,6 +14,8 @@ export function useMinTid(boot: Boot | null) {
   const [dayStatus, setDayStatus] = useState<DayStatusMap>({});
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [form, setForm] = useState<DayFormState | null>(null);
+  /** Formularen som den sidst blev hentet eller gemt; afgør om dagen har ikke-gemte ændringer. */
+  const [savedForm, setSavedForm] = useState<DayFormState | null>(null);
   const [saving, setSaving] = useState(false);
   const [bulkFrom, setBulkFrom] = useState("");
   const [bulkTo, setBulkTo] = useState("");
@@ -134,7 +137,7 @@ export function useMinTid(boot: Boot | null) {
         if (entry != null && entry.time_in && entry != null && entry.time_out && entry?.work_hours != null) {
           lunch = inferLunchMin(timeIn, timeOut, Number(entry.work_hours), partialAbs);
         }
-        setForm({
+        const loaded: DayFormState = {
           day_type: entry ? entry.location || fromDbAbsenceType(entry.absence_type, entry.absence_code) || "Ingen" : norm > 0 ? "Kontor" : "Ingen",
           extra_abs: entry != null && entry.location && entry != null && entry.absence_type ? fromDbAbsenceType(entry.absence_type, entry.absence_code) as string : "",
           absence_choice: entry?.absence_choice || "",
@@ -152,10 +155,37 @@ export function useMinTid(boot: Boot | null) {
             hours: fmtNum(Number(a.hours)),
             task_note: a.task_note || ""
           }))
-        });
+        };
+        setForm(loaded);
+        setSavedForm(loaded);
       });
     }
   }, [selectedDate, proxyEmp]);
+
+  /** Ændringer på dagen der ikke er gemt (i en låst periode kan der ikke gemmes, så dér spørges ikke). */
+  const unsaved = !period?.locked && !economyApproved && formChanged(form, savedForm);
+  /** Glem ændringerne (efter gem, eller når man vælger at fortsætte uden at gemme). */
+  const markSaved = () => setSavedForm(form);
+  /** Sat når man allerede har sagt ja til at forlade siden (fx "Log ud"), så browseren ikke spørger igen. */
+  const leaving = useRef(false);
+  const allowUnload = () => {
+    leaving.current = true;
+  };
+
+  useEffect(() => {
+    if (!unsaved) {
+      return;
+    }
+    const warn = (e: BeforeUnloadEvent) => {
+      if (leaving.current) {
+        return;
+      }
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [unsaved]);
 
   return {
     dayStatus,
@@ -163,6 +193,9 @@ export function useMinTid(boot: Boot | null) {
     setSelectedDate,
     form,
     setForm,
+    unsaved,
+    markSaved,
+    allowUnload,
     saving,
     setSaving,
     bulkFrom,

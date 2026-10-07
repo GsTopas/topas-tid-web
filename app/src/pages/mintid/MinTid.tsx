@@ -1,4 +1,4 @@
-import type { Dispatch, SetStateAction } from "react";
+import { useState, type Dispatch, type SetStateAction } from "react";
 import { api, type Boot, type Period, type SessionEmployee } from "../../lib/api";
 import { addDays, fmtDate, fmtNum, parseNum, weekdayIdx } from "../../lib/format";
 import { PeriodSelect } from "../../components/PeriodPicker";
@@ -99,6 +99,9 @@ export function MinTid({ mt, period, boot, setBoot, emp, periods, flash }: Props
         }
       }
       await reloadDays();
+      if (from <= selectedDate && selectedDate <= to && !isOff(selectedDate)) {
+        mt.markSaved();
+      }
       flash(`✓ ${count} dage gemt (${fmtDate(from)} – ${fmtDate(to)})`);
     } catch (err) {
       flash("❌ " + (err as Error).message);
@@ -133,29 +136,58 @@ export function MinTid({ mt, period, boot, setBoot, emp, periods, flash }: Props
     }
   };
 
-  const saveDay = async () => {
+  /** Gemmer den valgte dag; giver kalenderstatus tilbage, eller null hvis den ikke blev gemt. */
+  const persistDay = async () => {
     if (isWorkDay && (form as DayFormState).allocations.some(missingTask)) {
-      return flash("❌ Vælg opgavetype på alle timelinjer — opgavetype er obligatorisk");
+      flash("❌ Vælg opgavetype på alle timelinjer — opgavetype er obligatorisk");
+      return null;
     }
     setSaving(true);
     try {
       await api.saveDay(buildPayload(selectedDate), proxyEmp?.id);
       const map = await reloadDays();
+      mt.markSaved();
       if (isWorkDay && Math.abs(remaining) > 0.01) {
         flash(`⚠️ Gemt — men kun ${fmtNum(allocated)} af ${fmtNum(total)} t er fordelt`);
       } else {
         flash(`${fmtDate(selectedDate)} gemt ✓`);
-        // Hop videre til næste arbejdsdag (til og med i dag) uden registrering.
-        // NOTE(recovery): her tjekkes ikke ansættelsesdato (i modsætning til ved periodeskift) — bevaret.
-        const next = mt.days.find(d => d > selectedDate && d <= boot.today && normFor(d) > 0 && (map![d] == null || !map![d].entry));
-        if (next) {
-          mt.setSelectedDate(next);
-        }
       }
+      return map || {};
     } catch (err) {
       flash("❌ " + (err as Error).message);
+      return null;
     } finally {
       setSaving(false);
+    }
+  };
+
+  const saveDay = async () => {
+    const map = await persistDay();
+    if (map && !(isWorkDay && Math.abs(remaining) > 0.01)) {
+      // Hop videre til næste arbejdsdag (til og med i dag) uden registrering.
+      // NOTE(recovery): her tjekkes ikke ansættelsesdato (i modsætning til ved periodeskift) — bevaret.
+      const next = mt.days.find(d => d > selectedDate && d <= boot.today && normFor(d) > 0 && (map[d] == null || !map[d].entry));
+      if (next) {
+        mt.setSelectedDate(next);
+      }
+    }
+  };
+
+  /* Påmindelse: skift af dag, periode eller medarbejder med ikke-gemte ændringer spørger først. */
+  const [pendingNav, setPendingNav] = useState<(() => void) | null>(null);
+  const guard = (go: () => void) => mt.unsaved ? setPendingNav(() => go) : go();
+  const stay = () => setPendingNav(null);
+  const discardAndGo = () => {
+    mt.markSaved();
+    setPendingNav(null);
+    pendingNav?.();
+  };
+  const saveAndGo = async () => {
+    const go = pendingNav;
+    const map = await persistDay();
+    setPendingNav(null);
+    if (map) {
+      go?.();
     }
   };
 
@@ -173,17 +205,18 @@ export function MinTid({ mt, period, boot, setBoot, emp, periods, flash }: Props
   };
 
   return <>
-    <div className="row periodline">{periods.length > 0 ? <PeriodSelect periods={periods} sel={period} onChange={p => {
+    <div className="row periodline">{periods.length > 0 ? <PeriodSelect periods={periods} sel={period} onChange={p => guard(() => {
         mt.setChosenPeriod(p);
         setBulkFrom("");
         setBulkTo("");
-      }} /> : <span className="muted">{period.month_name} {period.year} · {fmtDate(period.start_date)} – {fmtDate(period.end_date)}</span>}{proxyList.length > 1 && <select className="proxysel" value={proxyEmp?.id || ""} onChange={e => {
+      })} /> : <span className="muted">{period.month_name} {period.year} · {fmtDate(period.start_date)} – {fmtDate(period.end_date)}</span>}{proxyList.length > 1 && <select className="proxysel" value={proxyEmp?.id || ""} onChange={e => {
         const id = Number(e.target.value);
-        setProxyEmp(id && id !== boot.employee.id && proxyList.find(p => p.id === id) || null);
+        guard(() => setProxyEmp(id && id !== boot.employee.id && proxyList.find(p => p.id === id) || null));
       }}><option value="">Registrerer for: mig selv</option>{proxyList.filter(p => p.id !== boot.employee.id).map(p => <option value={p.id} key={p.id}>Registrerer for: {p.name}</option>)}</select>}{period.locked && <span className="warn">🔒 Låst af økonomi — kan ses, men ikke rettes</span>}{!period.locked && economyApproved && <span className="warn">🔒 {proxyEmp ? proxyEmp.name + " er" : "Du er"} godkendt af økonomi for denne periode — kan ikke rettes</span>}</div>
-    <PeriodCalendar weeks={mt.weeks} selectedDate={mt.selectedDate} today={boot.today} isOff={isOff} icon={d => dayStatusIcon(d, dayStatus, isOff(d), boot.today)} onSelect={mt.setSelectedDate} />
+    <PeriodCalendar weeks={mt.weeks} selectedDate={mt.selectedDate} today={boot.today} isOff={isOff} icon={d => dayStatusIcon(d, dayStatus, isOff(d), boot.today)} onSelect={d => d !== mt.selectedDate && guard(() => mt.setSelectedDate(d))} />
     {form && <DayForm form={form} setForm={setForm} date={selectedDate} boot={boot} normHours={normFor(selectedDate)} totals={totals} patch={patch} updateAlloc={updateAlloc} missingTask={missingTask} partialAbsence={partialAbsence} onSaveDefaults={saveDefaults} />}
     {form && <details className="bulk"><summary>🗓️ Registrér flere dage på én gang</summary><p className="muted small">Udfyld dagen ovenfor (fx Ferie eller Kontor med fordeling), vælg et interval — samme indhold gemmes på alle hverdage i intervallet.</p><div className="row"><label>Fra<input type="date" value={bulkFrom || selectedDate} min={period.start_date} max={period.end_date} onChange={e => setBulkFrom(e.target.value)} /></label><label>Til<input type="date" value={bulkTo || selectedDate} min={period.start_date} max={period.end_date} onChange={e => setBulkTo(e.target.value)} /></label><button className="primary" disabled={saving || locked} onClick={saveRange}>{locked ? "🔒 Låst" : saving ? "Gemmer…" : "💾 Gem dagene"}</button></div></details>}
     {form && <div className="savebar"><span className="muted">{WEEKDAYS_LONG[weekdayIdx(selectedDate)]} {fmtDate(selectedDate)}{isWorkDay && ` · ${fmtNum(allocated)} / ${fmtNum(total)} t fordelt`}</span><button className="primary" disabled={saving || locked} onClick={saveDay}>{locked ? "🔒 Perioden er låst" : saving ? "Gemmer…" : "💾 Gem dagen"}</button></div>}
+    {pendingNav && <div className="modal-backdrop" onClick={stay} onKeyDown={e => e.key === "Escape" && stay()}><div className="modal" role="dialog" aria-modal="true" aria-labelledby="ikkegemt-titel" onClick={e => e.stopPropagation()}><h3 id="ikkegemt-titel">Du har ikke gemt din dag</h3><p className="muted">{WEEKDAYS_LONG[weekdayIdx(selectedDate)]} {fmtDate(selectedDate)} har ændringer, der ikke er gemt. Vil du gemme dagen?</p><div className="modal-actions"><button className="ghost" onClick={stay}>Bliv på dagen</button><button className="ghost" onClick={discardAndGo}>Fortsæt uden at gemme</button><button className="primary" autoFocus disabled={saving} onClick={saveAndGo}>{saving ? "Gemmer…" : "💾 Gem og fortsæt"}</button></div></div></div>}
   </>;
 }

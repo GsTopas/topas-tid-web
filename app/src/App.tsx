@@ -112,6 +112,10 @@ export function App() {
   const isLeader = emp.is_admin || emp.is_manager;
   const tabs: [Tab, string][] = [["tid", "⏱️ Min tid"], ["periode", isLeader ? "📅 Medarbejder pr. periode" : "📅 Min periode"], ["afdeling", "👥 Afdelings indsigt"], ...(emp.can_economy || emp.is_manager ? [["okonomi", "📋 Afdelings overblik"]] as [Tab, string][] : []), ...(emp.can_economy ? [["fakturering", "💰 Fakturering"], ["fravaer", "🏖️ Fravær & løn"]] as [Tab, string][] : []), ...(isLeader ? [["admin", "⚙️ Settings"]] as [Tab, string][] : [])];
   return <div className="page">{newVersion && <div className="nyversion" role="status"><span>🔄 Der er en ny version af Topas Tid klar.</span><button className="primary" onClick={() => location.reload()}>Opdatér nu</button></div>}<header><div className="brand"><div className="logo">⏱️</div><h1>Topas Tid <span className="badge">Beta</span></h1></div><div className="user"><span>{emp.name}</span><div className="avatar">{initials(emp.name)}</div><button className="linkbtn" onClick={() => setChangingPassword(true)}>Skift password</button><button className="linkbtn" onClick={() => {
+          if (mt.unsaved && !window.confirm("Du har ikke gemt din dag. Vil du logge ud uden at gemme?")) {
+            return;
+          }
+          mt.allowUnload();
           signOutNow();
           location.reload();
         }}>Log ud</button></div></header><nav className="tabs">{tabs.map(([key, label]) => <button className={"tab" + (tab === key ? " sel" : "")} onClick={() => confirmDiscard() && setTab(key)} key={key}>{label}</button>)}</nav>{tab === "periode" && <MinPeriode boot={boot} />}{tab === "afdeling" && <AfdelingsIndsigt emp={emp} />}{tab === "okonomi" && <AfdelingsOverblik emp={emp} flash={flash} />}{tab === "fakturering" && <Fakturering flash={flash} />}{tab === "fravaer" && <FravaerLoen />}{tab === "admin" && <Settings flash={flash} emp={emp} onChanged={async () => setBoot(await api.bootstrap())} />}{tab === "tid" && <MinTid mt={mt} period={period} boot={boot} setBoot={setBoot} emp={emp} periods={periods} flash={flash} />}{toast && <div className="toast">{toast}</div>}</div>;
