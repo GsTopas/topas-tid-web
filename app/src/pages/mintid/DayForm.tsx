@@ -93,7 +93,7 @@ export function DayForm({ form, setForm, date, boot, normHours, totals, patch, u
                 company_id: e.target.value
               })}><option value="">— vælg —</option>{boot.companies.map(c => <option value={c.id} key={c.id}>{c.name}</option>)}</select></td>{boot.task_options.length > 0 && <td><select value={line.task_type} className={missingTask(line) ? "mangler" : ""} onChange={e => updateAlloc(idx, {
                 task_type: e.target.value
-              })}><option value="">{taskRequired ? "— vælg —" : "—"}</option>{boot.task_options.map(o => <option key={o}>{o}</option>)}</select></td>}<td><input className="hours" value={line.hours} onChange={e => updateAlloc(idx, {
+              })}><option value="">{taskRequired ? "— vælg —" : "—"}</option>{boot.task_options.map(o => <option key={o}>{o}</option>)}{line.task_type && !boot.task_options.includes(line.task_type) && <option value={line.task_type}>{line.task_type} (udgået)</option>}</select></td>}<td><input className="hours" value={line.hours} onChange={e => updateAlloc(idx, {
                 hours: e.target.value
               })} /></td><td><input value={line.task_note} onChange={e => updateAlloc(idx, {
                 task_note: e.target.value
