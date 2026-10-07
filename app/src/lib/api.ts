@@ -1249,9 +1249,11 @@ export const api = {
       supabase.from("task_types").select("id, name, active, sort").eq("department", department).order("sort").order("name"),
     ),
 
+  /** Ændring går via RPC'en `save_task_type`, så et nyt navn også følger med på eksisterende timelinjer. */
   async saveTaskType(id: number | null | undefined, data: TaskTypeInput): Promise<void> {
-    const query = id ? supabase.from("task_types").update(data).eq("id", id) : supabase.from("task_types").insert(data);
-    const { error } = await query;
+    const { error } = id
+      ? await supabase.rpc("save_task_type", { p_id: id, p_name: data.name ?? "", p_sort: data.sort ?? 0, p_active: data.active ?? true })
+      : await supabase.from("task_types").insert(data);
     if (error) {
       raise(error);
     }
