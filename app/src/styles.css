@@ -1320,3 +1320,9 @@ table.datatable tr.foot .saldo {
   border-radius: 6px;
   background: #ffffff0a
 }
+
+.login .linkbtn.forgot {
+  align-self: center;
+  font-size: 13px;
+  text-decoration: underline
+}
