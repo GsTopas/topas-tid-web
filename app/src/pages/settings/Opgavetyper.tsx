@@ -42,7 +42,7 @@ export function Opgavetyper({
   const saveAll = async () => {
     setSaving(true);
     const failed = await saveDirtyRows(rows, edits.dirty, g => api.saveTaskType(g.id, {
-      name: g.name,
+      name: g.name.trim(),
       sort: Number(g.sort) || 0,
       active: g.active
     }), flash);
