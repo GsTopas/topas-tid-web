@@ -11,6 +11,7 @@ import { Settings } from "./pages/settings/Settings";
 import { confirmDiscard } from "./pages/settings/shared";
 import { MinTid } from "./pages/mintid/MinTid";
 import { useMinTid } from "./pages/mintid/useMinTid";
+import { openedFromRecoveryLink } from "./lib/supabase";
 
 /** Initialer til avataren (op til to ord). */
 const initials = (name: string | null | undefined): string => (name || "?").split(" ").filter(Boolean).slice(0, 2).map(w => w[0]).join("").toUpperCase();
@@ -60,6 +61,8 @@ export function App() {
   const [toast, setToast] = useState("");
   const [tab, setTab] = useState<Tab>("tid");
   const [changingPassword, setChangingPassword] = useState(false);
+  // Opened from a "Glemt password" mail: the link logs the person in; they must pick a new password first.
+  const [recovering, setRecovering] = useState(openedFromRecoveryLink);
   const [periods, setPeriods] = useState<Period[]>([]);
   const flash = (msg: string) => {
     setToast(msg);
@@ -86,12 +89,14 @@ export function App() {
   const mt = useMinTid(boot);
   const period = mt.period;
 
-  if (emp != null && emp.must_change) {
-    return <ChangePassword onDone={async () => {
+  if (emp != null && (emp.must_change || recovering)) {
+    return <ChangePassword recovery={recovering} onDone={async () => {
+      setRecovering(false);
       setEmp({
         ...emp,
         must_change: false
       });
+      flash("✓ Nyt password gemt");
       setBoot(await api.bootstrap());
     }} />;
   }

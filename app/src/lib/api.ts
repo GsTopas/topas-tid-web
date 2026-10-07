@@ -531,6 +531,22 @@ export const api = {
     }
   },
 
+  /**
+   * "Glemt password": Supabase mails a reset link back to this app. Errors are swallowed on
+   * purpose: the screen always says the mail was sent, so nobody can probe which mails exist.
+   */
+  async requestPasswordReset(email: string): Promise<void> {
+    const redirectTo = window.location.origin + window.location.pathname;
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo });
+      if (error) {
+        console.warn("resetPasswordForEmail", error.message);
+      }
+    } catch (err) {
+      console.warn("resetPasswordForEmail", err);
+    }
+  },
+
   async changePassword(password: string): Promise<void> {
     const { error } = await supabase.auth.updateUser({ password, data: { must_change: false } });
     if (error) {
