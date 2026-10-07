@@ -1,4 +1,4 @@
-import { useState, type Dispatch, type SetStateAction } from "react";
+import type { Dispatch, SetStateAction } from "react";
 import { api, type Boot, type Period, type SessionEmployee } from "../../lib/api";
 import { addDays, fmtDate, fmtNum, parseNum, weekdayIdx } from "../../lib/format";
 import { PeriodSelect } from "../../components/PeriodPicker";
@@ -173,12 +173,11 @@ export function MinTid({ mt, period, boot, setBoot, emp, periods, flash }: Props
     }
   };
 
-  /* Påmindelse: skift af dag, periode eller medarbejder med ikke-gemte ændringer spørger først. */
-  const [pendingNav, setPendingNav] = useState<(() => void) | null>(null);
-  const guard = (go: () => void) => mt.unsaved ? setPendingNav(() => go) : go();
+  /* Påmindelse om ikke-gemt dag (tilstanden ligger i useMinTid, så også fanerne i App kan spørge). */
+  const { pendingNav, setPendingNav, guard } = mt;
   const stay = () => setPendingNav(null);
   const discardAndGo = () => {
-    mt.markSaved();
+    mt.discardChanges();
     setPendingNav(null);
     pendingNav?.();
   };
