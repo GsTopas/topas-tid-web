@@ -166,6 +166,12 @@ export function useMinTid(boot: Boot | null) {
   const unsaved = !period?.locked && !economyApproved && formChanged(form, savedForm);
   /** Glem ændringerne (efter gem, eller når man vælger at fortsætte uden at gemme). */
   const markSaved = () => setSavedForm(form);
+  /** Smid ændringerne væk: formularen sættes tilbage til det der sidst blev hentet/gemt. */
+  const discardChanges = () => setForm(savedForm);
+
+  /* Påmindelse: skift af dag, periode, medarbejder eller fane med ikke-gemte ændringer spørger først (dialog i MinTid). */
+  const [pendingNav, setPendingNav] = useState<(() => void) | null>(null);
+  const guard = (go: () => void) => unsaved ? setPendingNav(() => go) : go();
   /** Sat når man allerede har sagt ja til at forlade siden (fx "Log ud"), så browseren ikke spørger igen. */
   const leaving = useRef(false);
   const allowUnload = () => {
@@ -195,6 +201,10 @@ export function useMinTid(boot: Boot | null) {
     setForm,
     unsaved,
     markSaved,
+    discardChanges,
+    pendingNav,
+    setPendingNav,
+    guard,
     allowUnload,
     saving,
     setSaving,
