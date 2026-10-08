@@ -366,6 +366,14 @@ export interface CompanyAdminRow {
 
 export type CompanyInput = Partial<Omit<CompanyAdminRow, "id">>;
 
+export interface ProjectInput {
+  name: string;
+  billing_type: "loebende" | "samlet";
+  expected_settlement: string | null;
+  active: boolean;
+  sort: number;
+}
+
 export interface TaskTypeRow {
   id: number;
   name: string;
@@ -1242,6 +1250,27 @@ export const api = {
     if (error) {
       raise(error);
     }
+  },
+
+  /**
+   * Opretter/retter et projekt via RPC'en `save_project` (returnerer id).
+   * `rules` = null lader fordelingsnøglerne være; ellers erstattes de i samme transaktion.
+   * Databasen afviser et løbende projekt uden fordelingsnøgler.
+   */
+  async saveProject(id: number | null | undefined, data: ProjectInput, rules: RuleInput[] | null): Promise<number> {
+    const { data: newId, error } = await supabase.rpc("save_project", {
+      p_id: id ?? null,
+      p_name: data.name,
+      p_billing_type: data.billing_type,
+      p_expected_settlement: data.billing_type === "samlet" ? data.expected_settlement || null : null,
+      p_active: data.active,
+      p_sort: data.sort,
+      p_rules: rules && rules.map((r) => ({ target_company_id: r.target_company_id, share: r.share })),
+    });
+    if (error) {
+      raise(error);
+    }
+    return newId as number;
   },
 
   taskTypesFor: (department: string): Promise<TaskTypeRow[]> =>
