@@ -69,6 +69,8 @@ Departments are a hard-coded list: Marketing, Økonomi, Digital Transformation, 
 - **Payroll periods (`periods`) do not follow calendar months.** For example, Juli = 22.06–26.07. They come from Topas's "Månedsoversigt". Only 2026 is seeded; each new year must be inserted.
 - **Locks.** `periods.locked` locks everyone. Economy approval in `period_approvals` locks one employee for one period. Both are enforced in RLS on `day_entries` and `allocations`. Økonomi can still set pay codes after locking.
 - **Two-step approval:** the department leader approves, then an Økonomi manager approves (this is "lønkørt" and locks the period for that employee). A leader cannot un-approve after the economy approval.
+  - **Leader approval locks only the employee** (since 8 Oct 2026): the employee can no longer edit that period, but leaders and admins still can (RLS: `is_emp_leader_approved()` in the `day_entries`/`allocations` write policies; Min tid shows "Din leder har godkendt perioden"). Removing the leader checkmark opens the period for the employee again.
+  - Hovering a checkmark in Afdelingsoverblik shows who approved and when (`leader_by`/`leader_at`, `economy_by`/`economy_at`), read via the RPC `period_approval_details` so names are visible across departments.
 - **A day** is one row in `day_entries` (unique per employee and date).
   - Day types: Kontor / Andet sted / Rejsedag (working), Ferie / Egen sygdom / Barn syg / Øvrigt fravær (absence), and "Ingen" (deletes the day).
   - A working day can also carry partial absence (a doctor's visit and similar).

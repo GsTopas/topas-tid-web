@@ -3,7 +3,7 @@ import { PeriodSelect } from "../components/PeriodPicker";
 import { usePeriod } from "../hooks/usePeriods";
 import { api, type SessionEmployee } from "../lib/api";
 import { downloadCsv } from "../lib/csv";
-import { addDays, fmtDate, weekdayIdx } from "../lib/format";
+import { addDays, approvedByText, fmtDate, weekdayIdx } from "../lib/format";
 
 type Matrix = Awaited<ReturnType<typeof api.ecoMatrix>>;
 type MatrixEmployee = Matrix["employees"][number];
@@ -56,6 +56,15 @@ export function AfdelingsOverblik({ emp, flash }: { emp: SessionEmployee | null;
   const canLeaderApprove = (x: MatrixEmployee) => emp != null && !!emp.is_manager && x.department === emp?.department;
   // Økonomi-godkendelse: admin eller leder i Økonomi
   const canEconomyApprove = emp != null && !!emp.is_admin || emp?.department === "Økonomi" && emp != null && !!emp.is_manager;
+  // Hover på fluebenene: hvem/hvornår (titlen sidder på cellen, så den også vises over en deaktiveret boks)
+  const leaderTitle = (x: MatrixEmployee, a: Approval | undefined) => {
+    const hint = canLeaderApprove(x) ? a != null && a.economy_approved ? "Økonomi har låst — lås op dér først" : a != null && a.leader_approved ? "Fjern fluebenet for at åbne perioden for medarbejderen igen" : "Leder-godkend medarbejderens timer for perioden (låser perioden for medarbejderen)" : "Kun lederen i medarbejderens egen afdeling";
+    return a != null && a.leader_approved ? approvedByText("Godkendt", a.leader_by_name, a.leader_at) + "\n" + hint : hint;
+  };
+  const economyTitle = (a: Approval | undefined) => {
+    const hint = canEconomyApprove ? a != null && a.leader_approved ? "Lønkør = lås medarbejderens periode" : "Afventer leder-godkendelse" : "Kun ledere i Økonomi (eller admin)";
+    return a != null && a.economy_approved ? approvedByText("Lønkørt", a.economy_by_name, a.economy_at) + "\n" + hint : hint;
+  };
   const setLeader = async (empId: MatrixEmployee["id"], value: boolean) => {
     try {
       await api.setLeaderApproval(period!.id, empId, value);
@@ -183,6 +192,6 @@ export function AfdelingsOverblik({ emp, flash }: { emp: SessionEmployee | null;
         datoer: x.missDates.map(fmtDate).join(", ")
       })))}>⬇️ Rykkerliste (Excel)</button></p> : <p className="ok">✅ Alle er ajour til dags dato.</p>}<div className="tablewrap"><table className="datatable matrix"><thead><tr><th>Medarbejder</th><th className="godk">Leder ✓</th><th className="godk">Økonomi 🔒</th>{table.dates.map(x => <th className="mday" key={x}>{x.slice(8, 10)}</th>)}<th className="num">Mangler</th><th className="num">Delvist</th></tr></thead><tbody>{shown.map(x => {
             const a = approvals[x.emp.id];
-            return <tr key={x.emp.id}><td>{x.emp.name}</td><td className={"godk" + (a != null && a.leader_approved ? " godk-ok" : "")}><input type="checkbox" checked={a != null && !!a.leader_approved} disabled={!canLeaderApprove(x.emp) || a != null && !!a.economy_approved} title={canLeaderApprove(x.emp) ? a != null && a.economy_approved ? "Økonomi har låst — lås op dér først" : "Leder-godkend medarbejderens timer for perioden" : "Kun lederen i medarbejderens egen afdeling"} onChange={V => setLeader(x.emp.id, V.target.checked)} /></td><td className={"godk" + (a != null && a.economy_approved ? " godk-laast" : "")}><input type="checkbox" checked={a != null && !!a.economy_approved} disabled={!canEconomyApprove || (a == null || !a.leader_approved) && (a == null || !a.economy_approved)} title={canEconomyApprove ? a != null && a.leader_approved ? "Lønkør = lås medarbejderens periode" : "Afventer leder-godkendelse" : "Kun ledere i Økonomi (eller admin)"} onChange={V => setEconomy(x.emp.id, V.target.checked)} /></td>{x.cells.map((V, W) => <td className={"mcell " + V.cls} key={W}>{V.c}</td>)}<td className={"num" + (x.mangler ? " error" : "")}>{x.mangler}</td><td className={"num" + (x.delvist ? " warn" : "")}>{x.delvist}</td></tr>;
-          })}</tbody></table></div><p className="muted small"><b>!</b> intet indtastet · <b>~</b> påbegyndt, fordeling mangler · <b>✓</b> alt fordelt ·<b> F</b> ferie · <b>S</b> sygdom · <b>B</b> barn syg · <b>Ø</b> øvrigt fravær</p><p className="muted small"><b>Godkendelse:</b> Afdelingslederen godkender først (Leder ✓), derefter godkender økonomi (Økonomi 🔒) — det låser medarbejderens Min tid for perioden. Ledere kan indtil da registrere på vegne af fraværende via vælgeren på Min tid.</p></div>;
+            return <tr key={x.emp.id}><td>{x.emp.name}</td><td className={"godk" + (a != null && a.leader_approved ? " godk-ok" : "")} title={leaderTitle(x.emp, a)}><input type="checkbox" checked={a != null && !!a.leader_approved} disabled={!canLeaderApprove(x.emp) || a != null && !!a.economy_approved} onChange={V => setLeader(x.emp.id, V.target.checked)} /></td><td className={"godk" + (a != null && a.economy_approved ? " godk-laast" : "")} title={economyTitle(a)}><input type="checkbox" checked={a != null && !!a.economy_approved} disabled={!canEconomyApprove || (a == null || !a.leader_approved) && (a == null || !a.economy_approved)} onChange={V => setEconomy(x.emp.id, V.target.checked)} /></td>{x.cells.map((V, W) => <td className={"mcell " + V.cls} key={W}>{V.c}</td>)}<td className={"num" + (x.mangler ? " error" : "")}>{x.mangler}</td><td className={"num" + (x.delvist ? " warn" : "")}>{x.delvist}</td></tr>;
+          })}</tbody></table></div><p className="muted small"><b>!</b> intet indtastet · <b>~</b> påbegyndt, fordeling mangler · <b>✓</b> alt fordelt ·<b> F</b> ferie · <b>S</b> sygdom · <b>B</b> barn syg · <b>Ø</b> øvrigt fravær</p><p className="muted small"><b>Godkendelse:</b> Afdelingslederen godkender først (Leder ✓), så kan medarbejderen ikke længere rette i perioden, men lederen kan stadig registrere på vegne af medarbejderen via vælgeren på Min tid. Derefter godkender økonomi (Økonomi 🔒) — det låser perioden for alle. Hold musen over et flueben for at se hvem der har godkendt og hvornår.</p></div>;
 }
