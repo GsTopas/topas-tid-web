@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api, type Boot, type NormDay, type Period } from "../../lib/api";
 import { addDays, fmtNum, weekdayIdx } from "../../lib/format";
-import { fromDbAbsenceType } from "./constants";
+import { fromDbAbsenceType, fromDbPartialAbsence } from "./constants";
 import { dayDefaults } from "./normweek";
 import { inferLunchMin, workHours } from "./time";
 import { formChanged } from "./unsaved";
@@ -165,7 +165,7 @@ export function useMinTid(boot: Boot | null) {
         }
         const loaded: DayFormState = {
           day_type: entry ? entry.location || fromDbAbsenceType(entry.absence_type, entry.absence_code) || "Ingen" : norm > 0 || normDay ? "Kontor" : "Ingen",
-          extra_abs: entry != null && entry.location && entry != null && entry.absence_type ? fromDbAbsenceType(entry.absence_type, entry.absence_code) as string : "",
+          extra_abs: entry != null && entry.location && entry != null && entry.absence_type ? fromDbPartialAbsence(entry.absence_type, entry.absence_code) : "",
           absence_choice: entry?.absence_choice || "",
           location_note: entry?.location_note || "",
           absence_note: entry?.absence_note || "",
