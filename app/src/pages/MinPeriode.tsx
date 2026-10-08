@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useState } from "react";
 import { api, type Boot } from "../lib/api";
 import { fmtDate, fmtNum, weekdayIdx } from "../lib/format";
+import { HALF_HOLIDAY } from "../lib/ferie";
 
 const fmtSigned = (n: number) => (n >= 0 ? "+" : "") + fmtNum(n);
 import { DataTable, type Row } from "../components/DataTable";
@@ -84,7 +85,7 @@ export function MinPeriode({ boot }: { boot: Boot }) {
     rows.push({
       dato: `${WEEKDAYS[weekdayIdx(date)]} ${date.slice(8, 10)}.${date.slice(5, 7)}`,
       sted: entry?.location || "",
-      frav: entry?.absence_type || "",
+      frav: entry?.absence_type === "Ferie" && entry.location ? HALF_HOLIDAY : entry?.absence_type || "",
       fravt: entry?.absence_hours != null ? fmtNum(absence) : "",
       ind: entry?.time_in?.slice(0, 5) || "",
       ud: entry?.time_out?.slice(0, 5) || "",
