@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { api, type Boot, type Period } from "../../lib/api";
+import { api, type Boot, type NormDay, type Period } from "../../lib/api";
 import { addDays, fmtNum, weekdayIdx } from "../../lib/format";
 import { fromDbAbsenceType } from "./constants";
-import { defaultTimeOut, inferLunchMin, workHours } from "./time";
+import { dayDefaults } from "./normweek";
+import { inferLunchMin, workHours } from "./time";
 import { formChanged } from "./unsaved";
 import type { DayFormState, DayStatusMap, ProxyEmployee, WeeklyNorm } from "./types";
 
@@ -31,6 +32,23 @@ export function useMinTid(boot: Boot | null) {
   }, [boot]);
 
   const period = chosenPeriod || boot?.period;
+  /** Den medarbejder der registreres for. */
+  const empId = proxyEmp?.id || boot?.employee.id;
+
+  /** Normugen (mødt/gået/frokost pr. ugedag) for empId; null indtil den er hentet. */
+  const [normWeek, setNormWeek] = useState<{ empId: number; days: NormDay[] } | null>(null);
+  useEffect(() => {
+    if (!empId) {
+      return;
+    }
+    let current = true;
+    api.normWeek(empId).catch(() => [] as NormDay[]).then(days => current && setNormWeek({ empId, days }));
+    return () => {
+      current = false;
+    };
+  }, [empId]);
+  /** Normugen er hentet for den medarbejder der registreres for. */
+  const normDays = normWeek && normWeek.empId === empId ? normWeek.days : null;
 
   useEffect(() => {
     if (!boot || !period) {
@@ -124,21 +142,22 @@ export function useMinTid(boot: Boot | null) {
   }, [boot, chosenPeriod, proxyEmp]);
 
   useEffect(() => {
-    if (selectedDate) {
+    // Venter på normugen, så en tom dag forudfyldes med personens egne tider.
+    if (selectedDate && normDays) {
       api.day(selectedDate, proxyEmp?.id).then(res => {
         const entry = res.entry;
         const norm = normFor(selectedDate);
-        const defaultIn = "08:00";
-        const defaultOut = defaultTimeOut(norm);
-        const timeIn = entry?.time_in?.slice(0, 5) || defaultIn;
-        const timeOut = entry?.time_out?.slice(0, 5) || defaultOut;
+        const normDay = normDays.find(n => n.weekday === weekdayIdx(selectedDate));
+        const defaults = dayDefaults(normDay, norm);
+        const timeIn = entry?.time_in?.slice(0, 5) || defaults.time_in;
+        const timeOut = entry?.time_out?.slice(0, 5) || defaults.time_out;
         const partialAbs = entry != null && entry.location && entry != null && entry.absence_type ? Number(entry.absence_hours || 0) : 0;
-        let lunch = 30;
+        let lunch = defaults.lunch_min;
         if (entry != null && entry.time_in && entry != null && entry.time_out && entry?.work_hours != null) {
           lunch = inferLunchMin(timeIn, timeOut, Number(entry.work_hours), partialAbs);
         }
         const loaded: DayFormState = {
-          day_type: entry ? entry.location || fromDbAbsenceType(entry.absence_type, entry.absence_code) || "Ingen" : norm > 0 ? "Kontor" : "Ingen",
+          day_type: entry ? entry.location || fromDbAbsenceType(entry.absence_type, entry.absence_code) || "Ingen" : norm > 0 || normDay ? "Kontor" : "Ingen",
           extra_abs: entry != null && entry.location && entry != null && entry.absence_type ? fromDbAbsenceType(entry.absence_type, entry.absence_code) as string : "",
           absence_choice: entry?.absence_choice || "",
           location_note: entry?.location_note || "",
@@ -160,7 +179,7 @@ export function useMinTid(boot: Boot | null) {
         setSavedForm(loaded);
       });
     }
-  }, [selectedDate, proxyEmp]);
+  }, [selectedDate, proxyEmp, normDays]);
 
   /** Ændringer på dagen der ikke er gemt (i en låst periode kan der ikke gemmes, så dér spørges ikke). */
   const unsaved = !period?.locked && !economyApproved && formChanged(form, savedForm);
@@ -222,7 +241,10 @@ export function useMinTid(boot: Boot | null) {
     weeks,
     normFor,
     beforeHired,
-    reloadDays
+    reloadDays,
+    empId,
+    normDays,
+    setNormWeek
   };
 }
 

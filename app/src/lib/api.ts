@@ -41,6 +41,14 @@ export interface CompanyBasic {
   name: string;
 }
 
+/** Normuge: typisk mødt/gået/frokost for én ugedag (0 = mandag … 6 = søndag). Ugedage uden række er tomme. */
+export interface NormDay {
+  weekday: number;
+  time_in: string;
+  time_out: string;
+  lunch_min: number;
+}
+
 export interface DefaultAllocation {
   company_id: number;
   share: number;
@@ -1371,6 +1379,28 @@ export const api = {
       start: Number(emp?.flex_start || 0),
       kontrol: kontrolSum(entries, emp?.weekly_norm),
     };
+  },
+
+  /** Normugen for en medarbejder (tidspunkter som "HH:MM"). */
+  async normWeek(employeeId: number): Promise<NormDay[]> {
+    const rows = await q<{ weekday: number; time_in: string | null; time_out: string | null; lunch_min: number }>(
+      supabase.from("norm_week").select("weekday, time_in, time_out, lunch_min").eq("employee_id", employeeId).order("weekday"),
+    );
+    // Ugedage uden tider er tomme (forudfyldes som før).
+    return rows.filter((r) => r.time_in && r.time_out).map((r) => ({
+      weekday: Number(r.weekday),
+      time_in: String(r.time_in).slice(0, 5),
+      time_out: String(r.time_out).slice(0, 5),
+      lunch_min: Number(r.lunch_min),
+    }));
+  },
+
+  /** Gemmer hele normugen (RPC: skriver alle 7 ugedage i én transaktion; ugedage der ikke er med, bliver tomme). */
+  async saveNormWeek(employeeId: number, days: NormDay[]): Promise<void> {
+    const { error } = await supabase.rpc("save_norm_week", { p_employee_id: employeeId, p_days: days });
+    if (error) {
+      raise(error);
+    }
   },
 
   proxyEmployees: (): Promise<ProxyEmployee[]> =>
