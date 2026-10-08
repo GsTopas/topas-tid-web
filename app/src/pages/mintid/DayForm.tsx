@@ -1,7 +1,8 @@
 import type { Dispatch, SetStateAction } from "react";
 import type { Boot } from "../../lib/api";
 import { fmtDate, fmtNum, parseNum, weekdayIdx } from "../../lib/format";
-import { ABSENCE_TYPES, DAY_TYPES, LOCATION_NOTE_TYPES, LUNCH_OPTIONS, WEEKDAYS_LONG } from "./constants";
+import { DAY_TYPES, LOCATION_NOTE_TYPES, LUNCH_OPTIONS, PARTIAL_ABSENCE_TYPES, WEEKDAYS_LONG } from "./constants";
+import { HALF_HOLIDAY } from "../../lib/ferie";
 import { workHours } from "./time";
 import { TimePicker } from "./TimePicker";
 import type { AllocLine, DayFormState } from "./types";
@@ -65,18 +66,21 @@ export function DayForm({ form, setForm, date, boot, normHours, totals, patch, u
             lunch_min: lunch,
             work_hours: fmtNum(workHours(form.time_in, form.time_out, lunch, partialAbsence()))
           });
-        }}>{[...new Set([...LUNCH_OPTIONS, form.lunch_min])].sort((a, b) => a - b).map(m => <option value={m} key={m}>{m} min</option>)}</select></label><label>Arbejdstimer (mødt − gået − frokost − fravær)<input className="hours" value={form.work_hours} disabled={true} title="Beregnes automatisk af mødt, gået og frokost" /></label></div>}{isWorkDay && <div className="row extraabs"><label>🤒 Fravær samme dag? (læge, delvis sygdom …)<select value={form.extra_abs} onChange={e => {
+        }}>{[...new Set([...LUNCH_OPTIONS, form.lunch_min])].sort((a, b) => a - b).map(m => <option value={m} key={m}>{m} min</option>)}</select></label><label>Arbejdstimer (mødt − gået − frokost − fravær)<input className="hours" value={form.work_hours} disabled={true} title="Beregnes automatisk af mødt, gået og frokost" /></label></div>}{isWorkDay && <div className="row extraabs"><label>🤒 Fravær/ferie samme dag? (læge, delvis sygdom, ½ feriedag …)<select value={form.extra_abs} onChange={e => {
           const abs = e.target.value;
-          // Ny fraværstype starter med 1 time; skift mellem typer beholder timerne.
-          const absHours = abs ? form.extra_abs ? parseNum(form.absence_hours) || 0 : 1 : 0;
+          // ½ feriedag dækker halvdelen af dagens normtid. Ny fraværstype starter med 1 time;
+          // skift mellem fraværstyper beholder timerne.
+          const halfNorm = Math.round(normHours / 2 * 100) / 100;
+          const resetHours = abs === HALF_HOLIDAY || form.extra_abs === HALF_HOLIDAY || !form.extra_abs;
+          const absHours = !abs ? 0 : abs === HALF_HOLIDAY ? halfNorm : resetHours ? 1 : parseNum(form.absence_hours) || 0;
           patch({
             extra_abs: abs,
-            ...(form.extra_abs || !abs ? {} : {
-              absence_hours: "1"
-            }),
+            ...(abs && resetHours ? {
+              absence_hours: fmtNum(absHours)
+            } : {}),
             work_hours: fmtNum(workHours(form.time_in, form.time_out, form.lunch_min, absHours))
           });
-        }}><option value="">Intet fravær</option>{ABSENCE_TYPES.map(o => <option key={o}>{o}</option>)}</select></label>{form.extra_abs && <label>Fraværstimer<input className="hours" inputMode="decimal" value={form.absence_hours} onChange={e => patch({
+        }}><option value="">Intet fravær</option>{PARTIAL_ABSENCE_TYPES.map(o => <option key={o}>{o}</option>)}</select></label>{form.extra_abs && <label>{form.extra_abs === HALF_HOLIDAY ? "Ferietimer" : "Fraværstimer"}<input className="hours" inputMode="decimal" value={form.absence_hours} onChange={e => patch({
           absence_hours: e.target.value,
           work_hours: fmtNum(workHours(form.time_in, form.time_out, form.lunch_min, parseNum(e.target.value) || 0))
         })} /></label>}{form.extra_abs === "Andet – firmabetalt" && <label>Hvilken slags? (kode 50)<select value={form.absence_choice} onChange={e => patch({

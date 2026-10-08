@@ -71,7 +71,7 @@ Departments are a hard-coded list: Marketing, Økonomi, Digital Transformation, 
 - **Two-step approval:** the department leader approves, then an Økonomi manager approves (this is "lønkørt" and locks the period for that employee). A leader cannot un-approve after the economy approval.
 - **A day** is one row in `day_entries` (unique per employee and date).
   - Day types: Kontor / Andet sted / Rejsedag (working), Ferie / Egen sygdom / Barn syg / Øvrigt fravær (absence), and "Ingen" (deletes the day).
-  - A working day can also carry partial absence (a doctor's visit and similar).
+  - A working day can also carry partial absence (a doctor's visit and similar) via "Fravær/ferie samme dag?". Its choice **½ feriedag** (since 8 Oct 2026) is stored as `absence_type = Ferie` on a working day (`location` set), pre-filled with half the day's norm as absence hours; it counts as **0,5 feriedag** (`holidayDays` in `lib/ferie.ts`) in Fravær & løn, while a whole Ferie day counts 1.
 - **Work hours** = time out − time in − lunch − partial absence, rounded to a **quarter hour**. Times are picked in 5-minute steps, and lunch defaults to 30 min.
   - *Why:* this mirrors the old paper and Excel sheet ("8–16 = 7,5 t").
   - Norm: `employees.weekly_norm` is a Mon..Sun array (default 7,5/7,5/7,5/7,5/7/0/0).

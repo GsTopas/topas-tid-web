@@ -1,6 +1,7 @@
 import type { PostgrestError } from "@supabase/supabase-js";
 import { supabase } from "./supabase";
 import { kontrolSum, type KontrolEntry } from "./saldo";
+import { holidayDays } from "./ferie";
 
 // ---------------------------------------------------------------------------
 // Row types (match the selected column lists). Numeric DB columns are typed as
@@ -1170,10 +1171,10 @@ export const api = {
     const [entries, employees, ytdRows] = await Promise.all([
       q<DayEntryRow>(supabase.from("day_entries").select("*").gte("work_date", from).lte("work_date", to).order("work_date")),
       q<AbsenceEmployeeRow>(supabase.from("employees").select("id, name, department, weekly_norm, hired_date, payroll_number")),
-      q<{ employee_id: number; absence_type: string | null; absence_hours: number | null }>(
+      q<{ employee_id: number; location: string | null; absence_type: string | null; absence_hours: number | null }>(
         supabase
           .from("day_entries")
-          .select("employee_id, absence_type, absence_hours")
+          .select("employee_id, location, absence_type, absence_hours")
           .gte("work_date", holidayYearStart)
           .lte("work_date", to)
           .not("absence_type", "is", null),
@@ -1195,9 +1196,8 @@ export const api = {
     for (const r of ytdRows) {
       const name = empById[r.employee_id]?.name || `#${r.employee_id}`;
       const acc = (ytd[name] = ytd[name] || { emp_name: name, ferie_ytd: 0, syg_ytd: 0 });
-      if (r.absence_type === "Ferie") {
-        acc.ferie_ytd += 1;
-      }
+      // ½ feriedag (ferie på en arbejdsdag) tæller 0,5
+      acc.ferie_ytd += holidayDays(r);
       if (r.absence_type === "Egen sygdom") {
         acc.syg_ytd += Number(r.absence_hours || 0);
       }

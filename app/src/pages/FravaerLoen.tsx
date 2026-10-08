@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../lib/api";
 import { addDays, fmtDate, fmtNum, weekdayIdx } from "../lib/format";
+import { HALF_HOLIDAY, holidayDays } from "../lib/ferie";
 import { downloadCsv } from "../lib/csv";
 import { DataTable } from "../components/DataTable";
 import { useMultiPeriod } from "../hooks/usePeriods";
@@ -94,7 +95,8 @@ export function FravaerLoen() {
         s.reg += e.absence_hours != null ? fravaerTimer : dagsNorm;
       }
       if (e.absence_type === "Ferie") {
-        s.ferie += 1;
+        // ½ feriedag (ferie på en arbejdsdag) tæller 0,5
+        s.ferie += holidayDays(e);
       } else if (e.absence_type === "Egen sygdom") {
         s.syg += fravaerTimer;
       } else if (e.absence_type === "Barn syg") {
@@ -110,7 +112,7 @@ export function FravaerLoen() {
           nr: e.payroll_number ?? "",
           afd: e.department || "",
           dato: fmtDate(e.work_date),
-          type: e.absence_type,
+          type: e.absence_type === "Ferie" && e.location ? HALF_HOLIDAY : e.absence_type,
           valg: e.absence_choice || "",
           kodeTxt: e.absence_code || "",
           timer: e.absence_hours != null ? fmtNum(fravaerTimer) : "",
@@ -188,12 +190,12 @@ export function FravaerLoen() {
       norm: fmtNum(s.norm),
       reg: fmtNum(s.reg),
       arb: fmtNum(s.arb),
-      ferie: s.ferie,
+      ferie: fmtNum(s.ferie),
       syg: fmtNum(s.syg),
       barn: fmtNum(s.barn),
       "øvr": fmtNum(s["øvr"]),
       flex: (s.flex >= 0 ? "+" : "") + fmtNum(s.flex),
-      "ferieår": Number(ytd[navn]?.ferie_ytd || 0)
+      "ferieår": fmtNum(Number(ytd[navn]?.ferie_ytd || 0))
     }))} /><h3>Fraværsliste — til indberetning <button className="ghost" onClick={() => downloadCsv(`fravaersliste_${sel.month_name}_${sel.year}.csv`, [{
         key: "nr",
         label: "Medarbejdernr"
