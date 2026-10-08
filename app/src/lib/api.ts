@@ -437,6 +437,11 @@ export interface ApprovalRow {
   employee_id: number;
   leader_approved: boolean | null;
   economy_approved: boolean | null;
+  /** Hvem/hvornår (til hover på fluebenene); null for ældre rækker uden oplysningen. */
+  leader_by_name?: string | null;
+  leader_at?: string | null;
+  economy_by_name?: string | null;
+  economy_at?: string | null;
 }
 
 export interface ProxyEmployee {
@@ -1369,10 +1374,9 @@ export const api = {
     }
   },
 
+  /** Periodens godkendelser inkl. navn og tidspunkt på godkenderen (RPC: godkenderen kan sidde i en anden afdeling). */
   approvalsForPeriod: (periodId: number): Promise<ApprovalRow[]> =>
-    q<ApprovalRow>(
-      supabase.from("period_approvals").select("employee_id, leader_approved, economy_approved").eq("period_id", periodId),
-    ),
+    q<ApprovalRow>(supabase.rpc("period_approval_details", { p_period: periodId })),
 
   async setLeaderApproval(periodId: number, employeeId: number, value: boolean): Promise<void> {
     const { error } = await supabase.rpc("set_leader_approval", { p_period: periodId, p_emp: employeeId, p_val: value });

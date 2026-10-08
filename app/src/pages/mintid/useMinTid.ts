@@ -24,6 +24,8 @@ export function useMinTid(boot: Boot | null) {
   const [proxyList, setProxyList] = useState<ProxyEmployee[]>([]);
   const [proxyEmp, setProxyEmp] = useState<ProxyEmployee | null>(null);
   const [economyApproved, setEconomyApproved] = useState(false);
+  /** Lederens godkendelse af perioden (null = ikke godkendt). */
+  const [leaderApproval, setLeaderApproval] = useState<{ name: string | null; at: string | null } | null>(null);
 
   useEffect(() => {
     if (boot && (boot.employee.is_manager || boot.employee.is_admin)) {
@@ -53,13 +55,18 @@ export function useMinTid(boot: Boot | null) {
   useEffect(() => {
     if (!boot || !period) {
       setEconomyApproved(false);
+      setLeaderApproval(null);
       return;
     }
     const empId = proxyEmp?.id || boot.employee.id;
     api.approvalsForPeriod(period.id).then(list => {
       const row = list.find(a => a.employee_id === empId);
+      setLeaderApproval(row != null && row.leader_approved ? { name: row.leader_by_name ?? null, at: row.leader_at ?? null } : null);
       return setEconomyApproved(row != null && !!row.economy_approved);
-    }).catch(() => setEconomyApproved(false));
+    }).catch(() => {
+      setEconomyApproved(false);
+      setLeaderApproval(null);
+    });
   }, [boot, chosenPeriod, proxyEmp]);
 
   const days = useMemo(() => {
@@ -181,8 +188,10 @@ export function useMinTid(boot: Boot | null) {
     }
   }, [selectedDate, proxyEmp, normDays]);
 
+  /** Leder-godkendt låser kun medarbejderen selv: ledere og admin kan stadig rette (håndhæves i RLS). */
+  const leaderLocked = leaderApproval != null && !!boot && !boot.employee.is_manager && !boot.employee.is_admin;
   /** Ændringer på dagen der ikke er gemt (i en låst periode kan der ikke gemmes, så dér spørges ikke). */
-  const unsaved = !period?.locked && !economyApproved && formChanged(form, savedForm);
+  const unsaved = !period?.locked && !economyApproved && !leaderLocked && formChanged(form, savedForm);
   /** Glem ændringerne (efter gem, eller når man vælger at fortsætte uden at gemme). */
   const markSaved = () => setSavedForm(form);
   /** Smid ændringerne væk: formularen sættes tilbage til det der sidst blev hentet/gemt. */
@@ -236,6 +245,8 @@ export function useMinTid(boot: Boot | null) {
     proxyEmp,
     setProxyEmp,
     economyApproved,
+    leaderApproval,
+    leaderLocked,
     period,
     days,
     weeks,
