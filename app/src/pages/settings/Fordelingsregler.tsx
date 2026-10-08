@@ -40,6 +40,9 @@ export function Fordelingsregler({ flash }: { flash: (msg: string) => void }) {
   const projects = companies.filter(w => w.kind === "projekt");
   const targets = companies.filter(w => w.kind === "selskab");
   const sum = drafts.reduce((w, b) => w + (parseNum(b.pct) || 0), 0);
+  // Et løbende projekt skal have fordelingsnøgler (databasen afviser det også).
+  const source = projects.find(w => w.id === Number(sourceId));
+  const mangler = source?.billing_type !== "samlet" && !drafts.some(w => (parseNum(w.pct) || 0) > 0);
   return <div><p className="muted">Regler flytter et projekts timer til de selskaber, der skal faktureres. Andele i procent — skal summe til 100.</p><select value={sourceId} onChange={w => setSourceId(w.target.value)}><option value="">— vælg projekt —</option>{projects.map(w => <option value={w.id} key={w.id}>{w.name}{withRules.has(w.id) ? " ●" : ""}</option>)}</select>{sourceId && <Fragment><table className="datatable admin slim"><thead><tr><th>Faktureres til</th><th className="num">Andel %</th><th /></tr></thead><tbody>{drafts.map((w, b) => <tr key={b}><td><select value={w.target_company_id} onChange={A => setDrafts(drafts.map((_, S) => S === b ? {
                 ..._,
                 target_company_id: Number(A.target.value)
@@ -49,7 +52,7 @@ export function Fordelingsregler({ flash }: { flash: (msg: string) => void }) {
               } : _))} /></td><td><button className="ghost x" onClick={() => setDrafts(drafts.filter((_A, _) => _ !== b))}>✕</button></td></tr>)}</tbody></table><div className="row"><button className="ghost" onClick={() => setDrafts([...drafts, {
           target_company_id: targets[0]?.id,
           pct: ""
-        }])}>➕ Tilføj modtager</button><span className={Math.abs(sum - 100) < 0.01 || drafts.length === 0 ? "ok" : "warn"}>Sum: {fmtNum(sum)} %{sum > 100.01 && " — over 100 % kan ikke gemmes"}{sum > 0 && sum < 99.99 && " — resten faktureres til projektet selv"}</span><button className="primary" disabled={sum > 100.01} title={sum > 100.01 ? "Andelene må højst summe til 100 %" : ""} onClick={async () => {
+        }])}>➕ Tilføj modtager</button><span className={Math.abs(sum - 100) < 0.01 || drafts.length === 0 ? "ok" : "warn"}>Sum: {fmtNum(sum)} %{sum > 100.01 && " — over 100 % kan ikke gemmes"}{sum > 0 && sum < 99.99 && " — resten faktureres til projektet selv"}</span>{mangler && <span className="warn">Løbende projekt: skal have mindst én modtager</span>}<button className="primary" disabled={sum > 100.01 || mangler} title={sum > 100.01 ? "Andelene må højst summe til 100 %" : mangler ? "Et løbende projekt skal have fordelingsnøgler" : ""} onClick={async () => {
           try {
             await api.saveRulesForSource(Number(sourceId), drafts.filter(w => (parseNum(w.pct) || 0) > 0).map(w => ({
               // NOTE(recovery): target_company_id kan være undefined, hvis der ikke findes selskaber (som i originalen).
