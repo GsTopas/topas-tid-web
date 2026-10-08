@@ -1383,10 +1383,11 @@ export const api = {
 
   /** Normugen for en medarbejder (tidspunkter som "HH:MM"). */
   async normWeek(employeeId: number): Promise<NormDay[]> {
-    const rows = await q<NormDay>(
+    const rows = await q<{ weekday: number; time_in: string | null; time_out: string | null; lunch_min: number }>(
       supabase.from("norm_week").select("weekday, time_in, time_out, lunch_min").eq("employee_id", employeeId).order("weekday"),
     );
-    return rows.map((r) => ({
+    // Ugedage uden tider er tomme (forudfyldes som før).
+    return rows.filter((r) => r.time_in && r.time_out).map((r) => ({
       weekday: Number(r.weekday),
       time_in: String(r.time_in).slice(0, 5),
       time_out: String(r.time_out).slice(0, 5),
@@ -1394,7 +1395,7 @@ export const api = {
     }));
   },
 
-  /** Gemmer hele normugen (RPC: erstatter alle ugedage i én transaktion). */
+  /** Gemmer hele normugen (RPC: skriver alle 7 ugedage i én transaktion; ugedage der ikke er med, bliver tomme). */
   async saveNormWeek(employeeId: number, days: NormDay[]): Promise<void> {
     const { error } = await supabase.rpc("save_norm_week", { p_employee_id: employeeId, p_days: days });
     if (error) {

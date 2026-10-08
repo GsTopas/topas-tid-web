@@ -1,14 +1,14 @@
 -- Normuge: hver medarbejders typiske mødt/gået/frokost pr. ugedag (0 = mandag … 6 = søndag).
 -- Bruges kun til at forudfylde tomme dage i Min tid; normtimer og saldo regnes stadig af employees.weekly_norm.
--- En ugedag uden række forudfyldes som før (08:00 + normtid).
+-- En ugedag uden tider (time_in NULL) forudfyldes som før (08:00 + normtid).
 CREATE TABLE timereg.norm_week (
-  employee_id integer NOT NULL REFERENCES timereg.employees(id) ON DELETE CASCADE,
+  employee_id integer NOT NULL REFERENCES timereg.employees(id),
   weekday smallint NOT NULL CHECK (weekday BETWEEN 0 AND 6),
-  time_in time NOT NULL,
-  time_out time NOT NULL,
+  time_in time,
+  time_out time,
   lunch_min integer NOT NULL DEFAULT 30 CHECK (lunch_min BETWEEN 0 AND 240),
   PRIMARY KEY (employee_id, weekday),
-  CHECK (time_out > time_in)
+  CHECK ((time_in IS NULL AND time_out IS NULL) OR time_out > time_in)
 );
 
 ALTER TABLE timereg.norm_week ENABLE ROW LEVEL SECURITY;
@@ -21,8 +21,8 @@ CREATE POLICY nw_select ON timereg.norm_week FOR SELECT TO authenticated
 
 GRANT SELECT ON timereg.norm_week TO authenticated;
 
--- Gemmer hele normugen på én gang (slet + indsæt i samme transaktion).
--- p_days: [{"weekday":0,"time_in":"08:00","time_out":"16:00","lunch_min":30}, …]; ugedage der ikke er med, ryddes.
+-- Gemmer hele normugen på én gang: alle 7 ugedage skrives (upsert); ugedage der ikke er med i p_days, får tomme tider.
+-- p_days: [{"weekday":0,"time_in":"08:00","time_out":"16:00","lunch_min":30}, …]
 CREATE OR REPLACE FUNCTION timereg.save_norm_week(p_employee_id integer, p_days jsonb)
  RETURNS void
  LANGUAGE plpgsql
@@ -35,11 +35,12 @@ BEGIN
           OR (me_is_manager() AND is_my_dept_employee(p_employee_id))) THEN
     RAISE EXCEPTION 'Du kan kun sætte normuge for dig selv eller din egen afdeling';
   END IF;
-  DELETE FROM norm_week WHERE employee_id = p_employee_id;
   INSERT INTO norm_week (employee_id, weekday, time_in, time_out, lunch_min)
-  SELECT p_employee_id, (d->>'weekday')::smallint, (d->>'time_in')::time, (d->>'time_out')::time,
-         COALESCE((d->>'lunch_min')::integer, 30)
-    FROM jsonb_array_elements(COALESCE(p_days, '[]'::jsonb)) d;
+  SELECT p_employee_id, w, (d->>'time_in')::time, (d->>'time_out')::time, COALESCE((d->>'lunch_min')::integer, 30)
+    FROM generate_series(0, 6) w
+    LEFT JOIN jsonb_array_elements(COALESCE(p_days, '[]'::jsonb)) d ON (d->>'weekday')::integer = w
+  ON CONFLICT (employee_id, weekday) DO UPDATE
+    SET time_in = EXCLUDED.time_in, time_out = EXCLUDED.time_out, lunch_min = EXCLUDED.lunch_min;
 END;
 $function$;
 
