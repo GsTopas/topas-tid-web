@@ -784,6 +784,11 @@ h3 {
   min-width: 0
 }
 
+.datatable.admin .tid15 select {
+  width: auto;
+  min-width: 58px
+}
+
 .datatable.admin input.hours {
   min-width: 60px;
   max-width: 90px;

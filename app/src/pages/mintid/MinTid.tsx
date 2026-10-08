@@ -1,9 +1,11 @@
-import type { Dispatch, SetStateAction } from "react";
+import { useState, type Dispatch, type SetStateAction } from "react";
 import { api, type Boot, type Period, type SessionEmployee } from "../../lib/api";
 import { addDays, fmtDate, fmtNum, parseNum, weekdayIdx } from "../../lib/format";
 import { PeriodSelect } from "../../components/PeriodPicker";
+import { confirmDiscard } from "../settings/shared";
 import { ABSENCE_TYPES, absenceCodeFor, toDbDayType, WEEKDAYS_LONG, WORK_DAY_TYPES } from "./constants";
 import { DayForm, type FormTotals } from "./DayForm";
+import { NormUge } from "./NormUge";
 import { dayStatusIcon, PeriodCalendar } from "./PeriodCalendar";
 import type { AllocLine, DayFormState, DayPayload } from "./types";
 import type { MinTidState } from "./useMinTid";
@@ -19,8 +21,9 @@ type Props = {
   flash: (msg: string) => void;
 };
 
-/** Fanen "⏱️ Min tid": periodelinje, kalender, dagsformular, flere dage på én gang og gem-bjælke. */
+/** Fanen "⏱️ Min tid": periodelinje, kalender, dagsformular, flere dage på én gang og gem-bjælke — og underfanen "Konfigurer normuge". */
 export function MinTid({ mt, period, boot, setBoot, emp, periods, flash }: Props) {
+  const [view, setView] = useState<"dage" | "normuge">("dage");
   const { dayStatus, form, setForm, saving, setSaving, bulkFrom, setBulkFrom, bulkTo, setBulkTo, proxyList, proxyEmp, setProxyEmp, economyApproved, normFor, beforeHired, reloadDays } = mt;
   const selectedDate = mt.selectedDate as string;
 
@@ -203,15 +206,30 @@ export function MinTid({ mt, period, boot, setBoot, emp, periods, flash }: Props
     taskRequired
   };
 
+  const proxySelect = proxyList.length > 1 && <select className="proxysel" value={proxyEmp?.id || ""} onChange={e => {
+    const id = Number(e.target.value);
+    if (confirmDiscard()) {
+      guard(() => setProxyEmp(id && id !== boot.employee.id && proxyList.find(p => p.id === id) || null));
+    }
+  }}><option value="">Registrerer for: mig selv</option>{proxyList.filter(p => p.id !== boot.employee.id).map(p => <option value={p.id} key={p.id}>Registrerer for: {p.name}</option>)}</select>;
+
+  const subtabs = <nav className="tabs subtabs"><button className={"tab sub" + (view === "dage" ? " sel" : "")} onClick={() => view !== "dage" && confirmDiscard() && setView("dage")}>⏱️ Registrér tid</button><button className={"tab sub" + (view === "normuge" ? " sel" : "")} onClick={() => view !== "normuge" && guard(() => setView("normuge"))}>⚙️ Konfigurer normuge</button></nav>;
+
+  if (view === "normuge") {
+    return <>
+      {subtabs}
+      {proxySelect && <div className="row periodline">{proxySelect}</div>}
+      {mt.empId && <NormUge empId={mt.empId} empName={proxyEmp ? proxyEmp.name : null} weeklyNorm={proxyEmp ? proxyEmp.weekly_norm : boot.weekly_norm} days={mt.normDays} onSaved={days => mt.setNormWeek({ empId: mt.empId as number, days })} flash={flash} />}
+    </>;
+  }
+
   return <>
+    {subtabs}
     <div className="row periodline">{periods.length > 0 ? <PeriodSelect periods={periods} sel={period} onChange={p => guard(() => {
         mt.setChosenPeriod(p);
         setBulkFrom("");
         setBulkTo("");
-      })} /> : <span className="muted">{period.month_name} {period.year} · {fmtDate(period.start_date)} – {fmtDate(period.end_date)}</span>}{proxyList.length > 1 && <select className="proxysel" value={proxyEmp?.id || ""} onChange={e => {
-        const id = Number(e.target.value);
-        guard(() => setProxyEmp(id && id !== boot.employee.id && proxyList.find(p => p.id === id) || null));
-      }}><option value="">Registrerer for: mig selv</option>{proxyList.filter(p => p.id !== boot.employee.id).map(p => <option value={p.id} key={p.id}>Registrerer for: {p.name}</option>)}</select>}{period.locked && <span className="warn">🔒 Låst af økonomi — kan ses, men ikke rettes</span>}{!period.locked && economyApproved && <span className="warn">🔒 {proxyEmp ? proxyEmp.name + " er" : "Du er"} godkendt af økonomi for denne periode — kan ikke rettes</span>}</div>
+      })} /> : <span className="muted">{period.month_name} {period.year} · {fmtDate(period.start_date)} – {fmtDate(period.end_date)}</span>}{proxySelect}{period.locked && <span className="warn">🔒 Låst af økonomi — kan ses, men ikke rettes</span>}{!period.locked && economyApproved && <span className="warn">🔒 {proxyEmp ? proxyEmp.name + " er" : "Du er"} godkendt af økonomi for denne periode — kan ikke rettes</span>}</div>
     <PeriodCalendar weeks={mt.weeks} selectedDate={mt.selectedDate} today={boot.today} isOff={isOff} icon={d => dayStatusIcon(d, dayStatus, isOff(d), boot.today)} onSelect={d => d !== mt.selectedDate && guard(() => mt.setSelectedDate(d))} />
     {form && <DayForm form={form} setForm={setForm} date={selectedDate} boot={boot} normHours={normFor(selectedDate)} totals={totals} patch={patch} updateAlloc={updateAlloc} missingTask={missingTask} partialAbsence={partialAbsence} onSaveDefaults={saveDefaults} />}
     {form && <details className="bulk"><summary>🗓️ Registrér flere dage på én gang</summary><p className="muted small">Udfyld dagen ovenfor (fx Ferie eller Kontor med fordeling), vælg et interval — samme indhold gemmes på alle hverdage i intervallet.</p><div className="row"><label>Fra<input type="date" value={bulkFrom || selectedDate} min={period.start_date} max={period.end_date} onChange={e => setBulkFrom(e.target.value)} /></label><label>Til<input type="date" value={bulkTo || selectedDate} min={period.start_date} max={period.end_date} onChange={e => setBulkTo(e.target.value)} /></label><button className="primary" disabled={saving || locked} onClick={saveRange}>{locked ? "🔒 Låst" : saving ? "Gemmer…" : "💾 Gem dagene"}</button></div></details>}
