@@ -3,7 +3,8 @@ import { PeriodSelect } from "../components/PeriodPicker";
 import { usePeriod } from "../hooks/usePeriods";
 import { api, type SessionEmployee } from "../lib/api";
 import { downloadCsv } from "../lib/csv";
-import { addDays, approvedByText, fmtDate, weekdayIdx } from "../lib/format";
+import { addDays, approvedByText, fmtDate } from "../lib/format";
+import { dayNorm, splitsByEmployee, type NormSplit } from "../lib/norm";
 
 type Matrix = Awaited<ReturnType<typeof api.ecoMatrix>>;
 type MatrixEmployee = Matrix["employees"][number];
@@ -35,11 +36,16 @@ export function AfdelingsOverblik({ emp, flash }: { emp: SessionEmployee | null;
   const [matrix, setMatrix] = useState<Matrix | null>(null);
   const [deptFilter, setDeptFilter] = useState("alle");
   const [approvals, setApprovals] = useState<Record<string, Approval>>({});
+  /** Normugens dagsfordelinger pr. medarbejder (dagsnormen følger dem, når ugesummen passer). */
+  const [splits, setSplits] = useState<Record<number, NormSplit[]>>({});
   useEffect(() => {
     if (period) {
       api.ecoMatrix(period.start_date, period.end_date).then(setMatrix);
     }
   }, [period]);
+  useEffect(() => {
+    api.normSplits().then(x => setSplits(splitsByEmployee(x))).catch(() => {});
+  }, []);
   const loadApprovals = () => {
     if (period) {
       api.approvalsForPeriod(period.id).then(x => {
@@ -106,7 +112,7 @@ export function AfdelingsOverblik({ emp, flash }: { emp: SessionEmployee | null;
       const missDates: string[] = [];
       const cells = dates.map((V): Cell => {
         const W = entryByKey[`${I.id}|${V}`];
-        const dayNorm = Number(I.weekly_norm[weekdayIdx(V)] || 0);
+        const normHours = dayNorm(I.weekly_norm, splits[I.id], V);
         if (W) {
           if (W.location) {
             const workHours = Number(W.work_hours || 0);
@@ -133,7 +139,7 @@ export function AfdelingsOverblik({ emp, flash }: { emp: SessionEmployee | null;
             c: "",
             cls: "m-wknd"
           };
-        } else if (dayNorm <= 0) {
+        } else if (normHours <= 0) {
           return {
             c: "",
             cls: "m-wknd"
@@ -165,7 +171,7 @@ export function AfdelingsOverblik({ emp, flash }: { emp: SessionEmployee | null;
       dates,
       rows
     };
-  }, [period, matrix]);
+  }, [period, matrix, splits]);
   if (!table) {
     return <p className="muted">Henter…</p>;
   }

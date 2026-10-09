@@ -219,7 +219,11 @@ export function MinTid({ mt, period, boot, setBoot, emp, periods, flash }: Props
     return <>
       {subtabs}
       {proxySelect && <div className="row periodline">{proxySelect}</div>}
-      {mt.empId && <NormUge empId={mt.empId} empName={proxyEmp ? proxyEmp.name : null} weeklyNorm={proxyEmp ? proxyEmp.weekly_norm : boot.weekly_norm} days={mt.normDays} onSaved={days => mt.setNormWeek({ empId: mt.empId as number, days })} flash={flash} />}
+      {mt.empId && <NormUge empId={mt.empId} empName={proxyEmp ? proxyEmp.name : null} weeklyNorm={proxyEmp ? proxyEmp.weekly_norm : boot.weekly_norm} days={mt.normDays} splits={mt.normSplits} onSaved={async days => {
+        const id = mt.empId as number;
+        const splits = await api.normSplits(id).catch(() => mt.normSplits || []);
+        mt.setNormWeek({ empId: id, days, splits });
+      }} flash={flash} />}
     </>;
   }
 

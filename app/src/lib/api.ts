@@ -1,6 +1,7 @@
 import type { PostgrestError } from "@supabase/supabase-js";
 import { supabase } from "./supabase";
 import { kontrolSum, type KontrolEntry } from "./saldo";
+import type { NormSplit } from "./norm";
 import { holidayDays } from "./ferie";
 
 // ---------------------------------------------------------------------------
@@ -42,12 +43,14 @@ export interface CompanyBasic {
   name: string;
 }
 
-/** Normuge: typisk mødt/gået/frokost for én ugedag (0 = mandag … 6 = søndag). Ugedage uden række er tomme. */
+/** Normuge: typisk mødt/gået/frokost for én ugedag (0 = mandag … 6 = søndag), eller fridag. Ugedage uden række er ikke sat. */
 export interface NormDay {
   weekday: number;
   time_in: string;
   time_out: string;
   lunch_min: number;
+  /** Fridag (0 timer); tiderne bruges ikke. */
+  day_off?: boolean;
 }
 
 export interface DefaultAllocation {
@@ -1394,7 +1397,7 @@ export const api = {
 
   /** ÅTD saldo: medarbejderens start saldo (flex_start) + sum af Kontrol fra `from` til `to`. */
   async atdSaldo(from: string, to: string, employeeId: number): Promise<{ start: number; kontrol: number }> {
-    const [emps, entries] = await Promise.all([
+    const [emps, entries, splits] = await Promise.all([
       q<{ flex_start: number | null; weekly_norm: WeeklyNorm | null }>(
         supabase.from("employees").select("flex_start, weekly_norm").eq("id", employeeId),
       ),
@@ -1406,26 +1409,38 @@ export const api = {
           .gte("work_date", from)
           .lte("work_date", to),
       ),
+      api.normSplits(employeeId).catch(() => [] as NormSplit[]),
     ]);
     const emp = emps[0];
     return {
       start: Number(emp?.flex_start || 0),
-      kontrol: kontrolSum(entries, emp?.weekly_norm),
+      kontrol: kontrolSum(entries, emp?.weekly_norm, splits),
     };
   },
 
-  /** Normugen for en medarbejder (tidspunkter som "HH:MM"). */
+  /** Normugen for en medarbejder (tidspunkter som "HH:MM"); fridage har day_off. */
   async normWeek(employeeId: number): Promise<NormDay[]> {
-    const rows = await q<{ weekday: number; time_in: string | null; time_out: string | null; lunch_min: number }>(
-      supabase.from("norm_week").select("weekday, time_in, time_out, lunch_min").eq("employee_id", employeeId).order("weekday"),
+    const rows = await q<{ weekday: number; time_in: string | null; time_out: string | null; lunch_min: number; day_off: boolean }>(
+      supabase.from("norm_week").select("weekday, time_in, time_out, lunch_min, day_off").eq("employee_id", employeeId).order("weekday"),
     );
-    // Ugedage uden tider er tomme (forudfyldes som før).
-    return rows.filter((r) => r.time_in && r.time_out).map((r) => ({
+    // Ugedage hverken med tider eller fridag er ikke sat (forudfyldes som før).
+    return rows.filter((r) => r.day_off || (r.time_in && r.time_out)).map((r) => ({
       weekday: Number(r.weekday),
-      time_in: String(r.time_in).slice(0, 5),
-      time_out: String(r.time_out).slice(0, 5),
+      time_in: r.day_off ? "" : String(r.time_in).slice(0, 5),
+      time_out: r.day_off ? "" : String(r.time_out).slice(0, 5),
       lunch_min: Number(r.lunch_min),
+      ...(r.day_off ? { day_off: true } : {}),
     }));
+  },
+
+  /** Normugens dagsfordelinger (norm_split) for en medarbejder, eller alle man må se. */
+  async normSplits(employeeId?: number): Promise<NormSplit[]> {
+    let query = supabase.from("norm_split").select("employee_id, valid_from, weekly_norm").order("valid_from");
+    if (employeeId != null) {
+      query = query.eq("employee_id", employeeId);
+    }
+    const rows = await q<NormSplit>(query);
+    return rows.map((r) => ({ ...r, weekly_norm: (r.weekly_norm || []).map(Number) }));
   },
 
   /** Gemmer hele normugen (RPC: skriver alle 7 ugedage i én transaktion; ugedage der ikke er med, bliver tomme). */

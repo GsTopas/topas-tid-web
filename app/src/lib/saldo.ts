@@ -1,4 +1,4 @@
-import { weekdayIdx } from "./format";
+import { dayNorm, type NormSplit } from "./norm";
 
 type Norm = Record<number, number | string | null | undefined>;
 
@@ -11,16 +11,17 @@ export interface KontrolEntry {
 
 /**
  * Sum af Kontrol-kolonnen (arbejdstid + fravær − dagens norm) for dage med
- * registreret arbejdssted — samme regel som "I ALT" i Min periode.
+ * registreret arbejdssted — samme regel som "I ALT" i Min periode. Dagens norm følger
+ * normugens dagsfordeling, når den gælder (se lib/norm.ts).
  */
-export function kontrolSum(entries: KontrolEntry[], norm: Norm | null | undefined): number {
+export function kontrolSum(entries: KontrolEntry[], norm: Norm | null | undefined, splits?: NormSplit[] | null): number {
   let sum = 0;
   for (const e of entries) {
     if (e.work_hours == null || !e.location) {
       continue;
     }
     const absence = e.absence_hours != null ? Number(e.absence_hours) : 0;
-    sum += Number(e.work_hours) + absence - Number(norm?.[weekdayIdx(e.work_date)] || 0);
+    sum += Number(e.work_hours) + absence - dayNorm(norm, splits, e.work_date);
   }
   return sum;
 }

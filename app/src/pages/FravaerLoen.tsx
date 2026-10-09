@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
+import { dayNorm, splitsByEmployee, type NormSplit } from "../lib/norm";
 import { api } from "../lib/api";
-import { addDays, fmtDate, fmtNum, weekdayIdx } from "../lib/format";
+import { addDays, fmtDate, fmtNum } from "../lib/format";
 import { HALF_HOLIDAY, holidayDays } from "../lib/ferie";
 import { downloadCsv } from "../lib/csv";
 import { DataTable } from "../components/DataTable";
@@ -21,6 +22,7 @@ type EmpStats = {
   flex: number;
   reg: number;
   _wn: WeeklyNorm;
+  _eid: number;
   _hired: string | null;
   norm?: number;
 };
@@ -51,6 +53,11 @@ export function FravaerLoen() {
     }
   };
   useEffect(load, [sel?.start_date, sel?.end_date]);
+  /** Normugens dagsfordelinger pr. medarbejder (dagsnormen følger dem, når ugesummen passer). */
+  const [splits, setSplits] = useState<Record<number, NormSplit[]>>({});
+  useEffect(() => {
+    api.normSplits().then(x => setSplits(splitsByEmployee(x))).catch(() => {});
+  }, []);
   useEffect(() => {
     api.absenceCodes().then(setCodes).catch(() => {});
   }, []);
@@ -81,10 +88,11 @@ export function FravaerLoen() {
         flex: 0,
         reg: 0,
         _wn: e.weekly_norm as WeeklyNorm,
+        _eid: e.employee_id,
         _hired: e.hired_date
       };
       const fravaerTimer = e.absence_hours != null ? Number(e.absence_hours) : 0;
-      const dagsNorm = Number((e.weekly_norm as WeeklyNorm)[weekdayIdx(e.work_date)] || 0);
+      const dagsNorm = dayNorm(e.weekly_norm as WeeklyNorm, splits[e.employee_id], e.work_date);
       if (e.work_hours != null && e.location) {
         const arbTimer = Number(e.work_hours);
         s.arb += arbTimer;
@@ -126,7 +134,7 @@ export function FravaerLoen() {
       let norm = 0;
       for (let d = sel.start_date; d <= sel.end_date; d = addDays(d, 1)) {
         if (!s._hired || !(d < s._hired)) {
-          norm += Number(s._wn[weekdayIdx(d)] || 0);
+          norm += dayNorm(s._wn, splits[s._eid], d);
         }
       }
       s.norm = norm;
@@ -135,7 +143,7 @@ export function FravaerLoen() {
       stats,
       fravaer
     };
-  }, [absence, sel?.start_date, sel?.end_date]);
+  }, [absence, sel?.start_date, sel?.end_date, splits]);
 
   if (!sel || !computed) {
     return <p className="muted">Henter…</p>;

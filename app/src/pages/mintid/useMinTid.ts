@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api, type Boot, type NormDay, type Period } from "../../lib/api";
 import { addDays, fmtNum, weekdayIdx } from "../../lib/format";
+import { dayNorm, type NormSplit } from "../../lib/norm";
 import { fromDbAbsenceType, fromDbPartialAbsence } from "./constants";
 import { dayDefaults } from "./normweek";
 import { inferLunchMin, workHours } from "./time";
@@ -37,20 +38,26 @@ export function useMinTid(boot: Boot | null) {
   /** Den medarbejder der registreres for. */
   const empId = proxyEmp?.id || boot?.employee.id;
 
-  /** Normugen (mødt/gået/frokost pr. ugedag) for empId; null indtil den er hentet. */
-  const [normWeek, setNormWeek] = useState<{ empId: number; days: NormDay[] } | null>(null);
+  /** Normugen (mødt/gået/frokost pr. ugedag) og dens dagsfordelinger for empId; null indtil de er hentet. */
+  const [normWeek, setNormWeek] = useState<{ empId: number; days: NormDay[]; splits: NormSplit[] } | null>(null);
   useEffect(() => {
     if (!empId) {
       return;
     }
     let current = true;
-    api.normWeek(empId).catch(() => [] as NormDay[]).then(days => current && setNormWeek({ empId, days }));
+    Promise.all([
+      api.normWeek(empId).catch(() => [] as NormDay[]),
+      api.normSplits(empId).catch(() => [] as NormSplit[])
+    ]).then(([days, splits]) => current && setNormWeek({ empId, days, splits }));
     return () => {
       current = false;
     };
   }, [empId]);
   /** Normugen er hentet for den medarbejder der registreres for. */
   const normDays = normWeek && normWeek.empId === empId ? normWeek.days : null;
+  const normSplits = normWeek && normWeek.empId === empId ? normWeek.splits : null;
+  /** Hvem normugen sidst blev hentet for (ændres ikke når man gemmer normugen). */
+  const normLoadedFor = normWeek?.empId;
 
   useEffect(() => {
     if (!boot || !period) {
@@ -101,11 +108,8 @@ export function useMinTid(boot: Boot | null) {
   /** Normtimer for datoen (for den medarbejder der registreres for). */
   const normFor = (date: string): number => {
     const norm = (proxyEmp?.weekly_norm ?? boot?.weekly_norm) as WeeklyNorm | null | undefined;
-    if (norm) {
-      return Number(norm[weekdayIdx(date)] || 0);
-    } else {
-      return 0;
-    }
+    // Normugens dagsfordeling når den gælder (samme ugesum som kontrakten), ellers kontraktens.
+    return norm ? dayNorm(norm, normSplits, date) : 0;
   };
 
   /** Dato før ansættelsesdato? */
@@ -138,7 +142,8 @@ export function useMinTid(boot: Boot | null) {
   };
 
   useEffect(() => {
-    if (!!boot && !!period) {
+    // Venter på normugens dagsfordeling, så "første manglende dag" regnes med den rigtige dagsnorm.
+    if (!!boot && !!period && normLoadedFor === empId) {
       reloadDays().then(map => {
         // Første arbejdsdag til og med i dag uden registrering; ellers i dag / periodens kant.
         const firstMissing = days.find(d => d <= boot.today && normFor(d) > 0 && !beforeHired(d) && (!map || !map[d]?.entry));
@@ -146,7 +151,7 @@ export function useMinTid(boot: Boot | null) {
         setSelectedDate(firstMissing || fallback);
       });
     }
-  }, [boot, chosenPeriod, proxyEmp]);
+  }, [boot, chosenPeriod, proxyEmp, normLoadedFor]);
 
   useEffect(() => {
     // Venter på normugen, så en tom dag forudfyldes med personens egne tider.
@@ -164,7 +169,7 @@ export function useMinTid(boot: Boot | null) {
           lunch = inferLunchMin(timeIn, timeOut, Number(entry.work_hours), partialAbs);
         }
         const loaded: DayFormState = {
-          day_type: entry ? entry.location || fromDbAbsenceType(entry.absence_type, entry.absence_code) || "Ingen" : norm > 0 || normDay ? "Kontor" : "Ingen",
+          day_type: entry ? entry.location || fromDbAbsenceType(entry.absence_type, entry.absence_code) || "Ingen" : normDay?.day_off ? "Ingen" : norm > 0 || normDay ? "Kontor" : "Ingen",
           extra_abs: entry != null && entry.location && entry != null && entry.absence_type ? fromDbPartialAbsence(entry.absence_type, entry.absence_code) : "",
           absence_choice: entry?.absence_choice || "",
           location_note: entry?.location_note || "",
@@ -255,6 +260,7 @@ export function useMinTid(boot: Boot | null) {
     reloadDays,
     empId,
     normDays,
+    normSplits,
     setNormWeek
   };
 }
