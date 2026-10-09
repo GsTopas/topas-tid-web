@@ -64,7 +64,9 @@ export function MinTid({ mt, period, boot, setBoot, emp, periods, flash }: Props
       work_date: date,
       day_type: toDbDayType(h.day_type),
       location_note: h.location_note || null,
-      absence_note: h.absence_note || null,
+      // Fritekstfeltet vises kun ved "Andet – egen betalt" (kode 51). Gem det ikke ved andre typer,
+      // ellers bliver en gammel tekst hængende usynligt på dagen (fx efter skift til ½ feriedag).
+      absence_note: absType === "Andet – egen betalt" && h.absence_note || null,
       extra_abs: isWorkDay && h.extra_abs ? toDbDayType(h.extra_abs) : null,
       absence_code: code,
       absence_choice: code === "50" && h.absence_choice || null,
