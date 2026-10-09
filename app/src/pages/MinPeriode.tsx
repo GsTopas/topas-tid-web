@@ -2,6 +2,7 @@ import { Fragment, useEffect, useState } from "react";
 import { api, type Boot } from "../lib/api";
 import { fmtDate, fmtNum, weekdayIdx } from "../lib/format";
 import { HALF_HOLIDAY } from "../lib/ferie";
+import { dayNorm, type NormSplit } from "../lib/norm";
 
 const fmtSigned = (n: number) => (n >= 0 ? "+" : "") + fmtNum(n);
 import { DataTable, type Row } from "../components/DataTable";
@@ -28,6 +29,14 @@ export function MinPeriode({ boot }: { boot: Boot }) {
     }
   }, [isLeader]);
   const [saldo, setSaldo] = useState<{ start: number; kontrol: number } | null>(null);
+  /** Normugens dagsfordelinger for den valgte medarbejder (dagsnormen følger dem, når ugesummen passer). */
+  const [splits, setSplits] = useState<NormSplit[]>([]);
+  useEffect(() => {
+    setSplits([]);
+    if (empId) {
+      api.normSplits(empId).then(setSplits).catch(() => {});
+    }
+  }, [empId]);
   useEffect(() => {
     if (period && empId) {
       api.myPeriod(period.start_date, period.end_date, empId).then(setData);
@@ -47,7 +56,7 @@ export function MinPeriode({ boot }: { boot: Boot }) {
   const byDate: Record<string, DayEntry> = Object.fromEntries(data.entries.map(e => [e.work_date, e]));
   const selected = employees.find(e => e.id === empId);
   const norm = ((selected?.weekly_norm) || boot.weekly_norm || []) as unknown as WeeklyNorm;
-  const normFor = (iso: string) => Number(norm[weekdayIdx(iso)] || 0);
+  const normFor = (iso: string) => dayNorm(norm, splits, iso);
   const isSelf = empId === me?.id;
   const who = isSelf ? "Du" : selected?.name || "Medarbejderen";
   const rows: Row[] = [];
