@@ -897,9 +897,11 @@ export const api = {
    * 7. projekter: projektøkonomi siden start (alle allocations på projekter, ingen datofilter),
    *    med månedsfordeling og linjer.
    * EN: same steps; arithmetic, rounding and ordering are identical to the original build.
+   * dept (afdelingsfilter): kun timer registreret af medarbejdere i den afdeling (deres nuværende
+   * afdeling i Medarbejdere) tælles med, også i projektøkonomien. Uden dept: som originalen.
    */
-  async ecoBilling(from: string, to: string): Promise<EcoBillingResult> {
-    const [allocs, rules, companies, employees] = await Promise.all([
+  async ecoBilling(from: string, to: string, dept?: string | null): Promise<EcoBillingResult> {
+    const [allAllocs, rules, companies, employees] = await Promise.all([
       fetchAll<BillingAllocRow>(() =>
         supabase
           .from("allocations")
@@ -914,6 +916,8 @@ export const api = {
     ]);
     const companyById: Record<string, BillingCompanyRow> = Object.fromEntries(companies.map((c) => [c.id, c]));
     const employeeById: Record<string, BillingEmployeeRow> = Object.fromEntries(employees.map((e) => [e.id, e]));
+    const inDept = (a: { employee_id: number }) => !dept || (employeeById[a.employee_id]?.department || "") === dept;
+    const allocs = allAllocs.filter(inDept);
     const samletIds = new Set(companies.filter((c) => c.kind === "projekt" && c.billing_type === "samlet").map((c) => c.id));
     const billable = allocs.filter((a) => !samletIds.has(a.company_id));
 
@@ -1106,7 +1110,7 @@ export const api = {
       );
       type ProjectAcc = { t: number; kr: number; lines: Record<string, EmpTaskLine>; mdr: Record<string, HoursKr> };
       const byProject: Record<string, ProjectAcc> = {};
-      for (const a of projectAllocs) {
+      for (const a of projectAllocs.filter(inDept)) {
         const emp: Partial<BillingEmployeeRow> = employeeById[a.employee_id] || {};
         const rate = Number(emp.hourly_rate || 0);
         const hours = Number(a.hours);

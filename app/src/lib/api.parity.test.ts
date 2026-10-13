@@ -77,6 +77,20 @@ describe("rebuilt api.ts matches the original bundle", () => {
   it("ecoBilling, several periods", async () => {
     expect(await api.ecoBilling("2026-07-27", "2026-12-31")).toEqual(await original.at.ecoBilling("2026-07-27", "2026-12-31"));
   });
+  it("ecoBilling with department filter splits the totals by department", async () => {
+    const all = await api.ecoBilling("2026-07-27", "2026-12-31");
+    const depts = [...new Set(Object.values(all.invoice).flat().map(l => l.dept))];
+    expect(depts.length).toBeGreaterThan(1);
+    const parts = await Promise.all(depts.map(d => api.ecoBilling("2026-07-27", "2026-12-31", d)));
+    parts.forEach((p, i) => {
+      expect(Object.values(p.invoice).flat().every(l => l.dept === depts[i])).toBe(true);
+      expect(p.projekter.flatMap(pr => pr.lines).every(l => l.dept === depts[i])).toBe(true);
+    });
+    for (const k of ["drift", "projektLoebende", "projektSamlet"] as const) {
+      expect(parts.reduce((s, p) => s + p.kategorier[k].t, 0)).toBeCloseTo(all.kategorier[k].t, 2);
+    }
+    expect(parts.reduce((s, p) => s + p.total.fakt_t, 0)).toBeCloseTo(all.total.fakt_t, 2);
+  });
   it("ecoAbsence (holiday year from 1 Sep)", async () => {
     expect(await api.ecoAbsence("2026-08-24", "2026-09-27")).toEqual(await original.at.ecoAbsence("2026-08-24", "2026-09-27"));
     expect(await api.ecoAbsence("2026-07-27", "2026-08-23")).toEqual(await original.at.ecoAbsence("2026-07-27", "2026-08-23"));

@@ -6,6 +6,7 @@ import { useMultiPeriod } from "../hooks/usePeriods";
 import { MultiPeriodPicker } from "../components/PeriodPicker";
 import { exportInvoicePdf, hoursByRate, invoiceRows, projectMonthTable, rateCols, rateColumns } from "../lib/invoice";
 import { ProjectEconomyView } from "../components/ProjectEconomyView";
+import { DEPARTMENTS } from "./settings/shared";
 
 type Billing = Awaited<ReturnType<typeof api.ecoBilling>>;
 
@@ -15,13 +16,15 @@ export function Fakturering({ flash }: Props) {
   const [periods, selIds, setSelIds, sel, reloadPeriods] = useMultiPeriod();
   const [data, setData] = useState<Billing | null>(null);
   const [valgtProjekt, setValgtProjekt] = useState("");
+  // Afdelingsfilter: "" = alle afdelinger
+  const [afd, setAfd] = useState("");
 
   useEffect(() => {
     if (!sel) {
       return;
     }
     let cancelled = false;
-    api.ecoBilling(sel.start_date, sel.end_date).then(res => {
+    api.ecoBilling(sel.start_date, sel.end_date, afd || null).then(res => {
       if (!cancelled) {
         setData(res);
       }
@@ -33,21 +36,37 @@ export function Fakturering({ flash }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [sel?.start_date, sel?.end_date]);
+  }, [sel?.start_date, sel?.end_date, afd]);
 
   if (!sel || !data) {
     return <p className="muted">Henter…</p>;
   }
 
   const projektNavne = new Set(data.projekter.map(p => p.comp));
+  // Med afdelingsfilter vises kun projekter, afdelingen har timer på
+  const projekter = afd ? data.projekter.filter(p => p.t > 0.005) : data.projekter;
   // Afslutningsprojekter: sorteret efter forventet afregningsdato (uden dato sidst), derefter beløb faldende
-  const samlede = data.projekter.filter(p => p.billing === "samlet").sort((a, b) => (a.expected || "9999").localeCompare(b.expected || "9999") || b.kr - a.kr);
+  const samlede = projekter.filter(p => p.billing === "samlet").sort((a, b) => (a.expected || "9999").localeCompare(b.expected || "9999") || b.kr - a.kr);
   const modtagere = Object.keys(data.invoice).sort();
   const selskabsModtagere = modtagere.filter(m => !projektNavne.has(m));
   const projektModtagere = modtagere.filter(m => projektNavne.has(m));
   const projekt = data.projekter.find(p => p.comp === valgtProjekt) || null;
-  const periodeTekst = sel.enkelt ? `Periode: ${sel.month_name} ${sel.year} (${fmtDate(sel.start_date)} – ${fmtDate(sel.end_date)})` : `Perioder: ${sel.month_name} ${sel.year} (${fmtDate(sel.start_date)} – ${fmtDate(sel.end_date)})`;
-  const filSuffix = sel.enkelt ? `${sel.month_name.toLowerCase()}_${sel.year}` : `${sel.start_date}_til_${sel.end_date}`;
+  const afdTekst = afd ? ` · Afdeling: ${afd}` : "";
+  const periodeTekst = (sel.enkelt ? `Periode: ${sel.month_name} ${sel.year} (${fmtDate(sel.start_date)} – ${fmtDate(sel.end_date)})` : `Perioder: ${sel.month_name} ${sel.year} (${fmtDate(sel.start_date)} – ${fmtDate(sel.end_date)})`) + afdTekst;
+  const filSuffix = (sel.enkelt ? `${sel.month_name.toLowerCase()}_${sel.year}` : `${sel.start_date}_til_${sel.end_date}`) + (afd ? `_${afd.toLowerCase().replace(/[^a-zæøå0-9]+/g, "_")}` : "");
+
+  // Pr. afdeling og modtager (kr til fakturering nu), bygget af fakturalinjerne
+  const afdKr: Record<string, Record<string, number>> = {};
+  const afdT: Record<string, number> = {};
+  for (const [til, linjer] of Object.entries(data.invoice)) {
+    for (const l of linjer) {
+      const d = l.dept || "(uden afdeling)";
+      (afdKr[til] = afdKr[til] || {})[d] = (afdKr[til][d] || 0) + l.kr;
+      afdT[d] = (afdT[d] || 0) + l.t;
+    }
+  }
+  const afdKolonner = [...DEPARTMENTS, ...Object.keys(afdT).filter(d => !DEPARTMENTS.includes(d)).sort()].filter(d => afdT[d] > 0.005);
+  const afdSum = (d: string) => Object.values(afdKr).reduce((s, r) => s + (r[d] || 0), 0);
 
   const toggleLock = async () => {
     const periode = sel.enkelt;
@@ -115,7 +134,26 @@ export function Fakturering({ flash }: Props) {
 
   return <div><div className="pagehead"><h2>💰 Fakturering</h2><div className="row" style={{
         margin: 0
-      }}><MultiPeriodPicker periods={periods} selIds={selIds} onChange={setSelIds} /><button className={sel.enkelt?.locked ? "ghost" : "primary"} disabled={!sel.enkelt} title={sel.enkelt ? "" : "Vælg én enkelt periode for at kunne låse den"} onClick={toggleLock}>{sel.enkelt?.locked ? "🔓 Åbn periode" : "🔒 Lås periode"}</button></div></div><div className="kpis"><div className="kpi"><span>Selskabs-drift-timer</span><strong>{fmtNum(kat.drift.t)} t</strong><em>{fmtKr(kat.drift.kr)} kr</em></div><div className="kpi"><span>Projekt-drift-timer (løbende)</span><strong>{fmtNum(kat.projektLoebende.t)} t</strong><em>{fmtKr(kat.projektLoebende.kr)} kr</em></div><div className="kpi"><span>Projekt-timer til samlet afregning</span><strong>{fmtNum(kat.projektSamlet.t)} t</strong><em>{fmtKr(kat.projektSamlet.kr)} kr</em></div></div><h3>Viderefakturering — timer pr. selskab</h3><DataTable cols={[{
+      }}><select value={afd} onChange={e => setAfd(e.target.value)} title="Vis kun timer registreret af medarbejdere i afdelingen"><option value="">Alle afdelinger</option>{DEPARTMENTS.map(d => <option key={d}>{d}</option>)}</select><MultiPeriodPicker periods={periods} selIds={selIds} onChange={setSelIds} /><button className={sel.enkelt?.locked ? "ghost" : "primary"} disabled={!sel.enkelt} title={sel.enkelt ? "" : "Vælg én enkelt periode for at kunne låse den"} onClick={toggleLock}>{sel.enkelt?.locked ? "🔓 Åbn periode" : "🔒 Lås periode"}</button></div></div><div className="kpis"><div className="kpi"><span>Selskabs-drift-timer</span><strong>{fmtNum(kat.drift.t)} t</strong><em>{fmtKr(kat.drift.kr)} kr</em></div><div className="kpi"><span>Projekt-drift-timer (løbende)</span><strong>{fmtNum(kat.projektLoebende.t)} t</strong><em>{fmtKr(kat.projektLoebende.kr)} kr</em></div><div className="kpi"><span>Projekt-timer til samlet afregning</span><strong>{fmtNum(kat.projektSamlet.t)} t</strong><em>{fmtKr(kat.projektSamlet.kr)} kr</em></div></div>{afd && <p className="muted small">Viser kun timer registreret af medarbejdere i <b>{afd}</b> (afdelingen i Settings → Medarbejdere). Fordelingsnøgler gælder som normalt. Vælg "Alle afdelinger" for at se det hele.</p>}{!afd && afdKolonner.length > 0 && <details className="fakt"><summary><strong>🏷️ Pr. afdeling — hvem har faktureret til hvem?</strong><span className="muted"> — kr til fakturering nu, efter fordelingsnøgler</span></summary><DataTable cols={[{
+      key: "til",
+      label: "Faktureres til"
+    }, ...afdKolonner.map(d => ({
+      key: d,
+      label: d,
+      num: true
+    })), {
+      key: "ialt",
+      label: "I alt (kr)",
+      num: true
+    }]} rows={Object.keys(afdKr).sort().map(til => ({
+      til,
+      ...Object.fromEntries(afdKolonner.map(d => [d, afdKr[til][d] ? fmtKr(afdKr[til][d]) : ""])),
+      ialt: fmtKr(Object.values(afdKr[til]).reduce((s, v) => s + v, 0))
+    }))} footer={{
+      til: "I ALT",
+      ...Object.fromEntries(afdKolonner.map(d => [d, fmtKr(afdSum(d))])),
+      ialt: fmtKr(afdKolonner.reduce((s, d) => s + afdSum(d), 0))
+    }} /><p className="muted small">Timer i alt: {afdKolonner.map(d => `${d} ${fmtNum(afdT[d])} t`).join(" · ")}. Vælg en afdeling øverst for at se dens fakturagrundlag.</p></details>}<h3>Viderefakturering — timer pr. selskab</h3><DataTable cols={[{
       key: "selskab",
       label: "Selskab"
     }, {
@@ -161,7 +199,7 @@ export function Fakturering({ flash }: Props) {
               ekstra: projectMonthTable(p)
             };
             exportInvoicePdf(args);
-          }}>⬇️ PDF</button>}</summary><ProjectEconomyView p={p} /></details>)}</>}<h3>Projekt-økonomi</h3><details className="fakt projok"><summary><strong>📁 Hvad har projekterne kostet indtil videre?</strong><span className="muted"> — vælg et projekt og se forbruget siden projektstart</span></summary><p className="muted small">Akkumuleret forbrug uafhængigt af den valgte periode — gælder både drift-projekter (faktureres løbende) og afslutningsprojekter (gemmes til aktivering).</p><select value={valgtProjekt} onChange={e => setValgtProjekt(e.target.value)}><option value="">— vælg projekt —</option>{data.projekter.map(p => <option value={p.comp} key={p.comp}>{p.comp} — {fmtNum(p.t)} t · {fmtKr(p.kr)} kr</option>)}</select>{projekt && <div className="projokdetalje"><p><span className="badge">{projekt.billing === "samlet" ? "🗂️ Samlet afregning ved afslutning" : "🔁 Drift — faktureres løbende"}</span> <strong>{fmtNum(projekt.t)} t · {fmtKr(projekt.kr)} kr</strong> siden projektstart{projekt.billing === "samlet" && (projekt.expected ? ` · forventes afregnet ${fmtDate(projekt.expected)}` : " · afregningsdato ikke sat")}{projekt.lines.length > 0 && <button className="ghost pdfbtn" title="Download PDF med projektopgørelsen" onClick={() => {
+          }}>⬇️ PDF</button>}</summary><ProjectEconomyView p={p} /></details>)}</>}<h3>Projekt-økonomi</h3><details className="fakt projok"><summary><strong>📁 Hvad har projekterne kostet indtil videre?</strong><span className="muted"> — vælg et projekt og se forbruget siden projektstart</span></summary><p className="muted small">Akkumuleret forbrug uafhængigt af den valgte periode — gælder både drift-projekter (faktureres løbende) og afslutningsprojekter (gemmes til aktivering).</p><select value={valgtProjekt} onChange={e => setValgtProjekt(e.target.value)}><option value="">— vælg projekt —</option>{projekter.map(p => <option value={p.comp} key={p.comp}>{p.comp} — {fmtNum(p.t)} t · {fmtKr(p.kr)} kr</option>)}</select>{projekt && <div className="projokdetalje"><p><span className="badge">{projekt.billing === "samlet" ? "🗂️ Samlet afregning ved afslutning" : "🔁 Drift — faktureres løbende"}</span> <strong>{fmtNum(projekt.t)} t · {fmtKr(projekt.kr)} kr</strong> siden projektstart{projekt.billing === "samlet" && (projekt.expected ? ` · forventes afregnet ${fmtDate(projekt.expected)}` : " · afregningsdato ikke sat")}{projekt.lines.length > 0 && <button className="ghost pdfbtn" title="Download PDF med projektopgørelsen" onClick={() => {
             const args = {
               til: projekt.comp,
               linjer: projekt.lines,
