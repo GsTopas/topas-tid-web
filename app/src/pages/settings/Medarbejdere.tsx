@@ -4,11 +4,17 @@ import { parseNum } from "../../lib/format";
 import { DEPARTMENTS, SaveAllBar, keepDirty, randomTempPassword, saveDirtyRows, splitWeeklyNorm, sumNorm, useDirtyRows } from "./shared";
 
 type Employee = Awaited<ReturnType<typeof api.employeesAll>>[number];
+type Company = Awaited<ReturnType<typeof api.companiesAll>>[number];
+
+/** Filter på "Ansat i": "" = alle, "none" = ikke angivet, ellers selskabets id. */
+type EmployerFilter = string;
+type SortKey = "name" | "employer" | "department";
 
 type EditedFields =
   | "name"
   | "email"
   | "department"
+  | "employer_company_id"
   | "hourly_rate"
   | "hired_date"
   | "payroll_number"
@@ -22,6 +28,7 @@ type EmployeeRow = Omit<Employee, EditedFields> & {
   name: string;
   email: string | null;
   department: string | null;
+  employer_company_id: number | null;
   hourly_rate: number | string;
   hired_date: string | null;
   payroll_number: number | string | null;
@@ -37,6 +44,7 @@ type NewEmployee = {
   name: string;
   email: string;
   department: string;
+  employer: string;
   rate: string;
   norm: string;
   nr: string;
@@ -60,16 +68,38 @@ export function Medarbejdere({ flash }: { flash: (msg: string) => void }) {
   const [draft, setDraft] = useState<NewEmployee | null>(null);
   const [pwInfo, setPwInfo] = useState("");
   const [saving, setSaving] = useState(false);
+  const [companies, setCompanies] = useState<Company[]>([]);
+  const [employerFilter, setEmployerFilter] = useState<EmployerFilter>("");
+  const [sortKey, setSortKey] = useState<SortKey>("name");
   const edits = useDirtyRows<EmployeeRow["id"]>();
   // Ikke-gemte rækker bevares ved genindlæsning (fx efter "Opret login"); login-status kommer fra databasen.
   const load = () => api.employeesAll().then(list =>
     setRows(prev => keepDirty(list as EmployeeRow[], prev, edits.current(), (f, l) => ({ ...l, auth_user_id: f.auth_user_id }))));
   useEffect(() => {
     load();
+    api.companiesAll().then(setCompanies);
   }, []);
   if (!rows) {
     return <p className="muted">Henter…</p>;
   }
+  const companyName = (id: number | null) => (id == null ? "" : companies.find(c => c.id === id)?.name ?? "");
+  // Valgmuligheder: aktive selskaber, plus det allerede valgte selv om det er inaktivt.
+  const employerOptions = (current: number | null) =>
+    companies.filter(c => c.kind === "selskab" && (c.active || c.id === current));
+  const shown = rows
+    .filter(p =>
+      employerFilter === "" ? true : employerFilter === "none" ? p.employer_company_id == null : p.employer_company_id === Number(employerFilter))
+    .map((p, i) => ({ p, i }))
+    .sort((a, b) => {
+      // Tomme værdier sidst; ellers stabil (indlæst rækkefølge = navn).
+      const key = (p: EmployeeRow) => sortKey === "employer" ? companyName(p.employer_company_id) : sortKey === "department" ? p.department || "" : "";
+      const ka = key(a.p), kb = key(b.p);
+      if (ka !== kb) {
+        return ka === "" ? 1 : kb === "" ? -1 : ka.localeCompare(kb, "da");
+      }
+      return a.i - b.i;
+    })
+    .map(x => x.p);
   const patch = (id: EmployeeRow["id"], changes: Partial<EmployeeRow>) => {
     setRows(rows.map(d => d.id === id ? { ...d, ...changes } : d));
     edits.mark(id);
@@ -79,6 +109,7 @@ export function Medarbejdere({ flash }: { flash: (msg: string) => void }) {
         name: p.name,
         email: (p.email || "").trim().toLowerCase() || null,
         department: p.department || null,
+        employer_company_id: p.employer_company_id ?? null,
         is_admin: p.is_admin,
         is_manager: p.is_manager,
         active: p.active,
@@ -110,13 +141,15 @@ export function Medarbejdere({ flash }: { flash: (msg: string) => void }) {
       flash("❌ " + (w as Error).message);
     }
   };
-  return <div>{pwInfo && <p className="ok pwinfo">🔑 {pwInfo} — skriv det ned, det vises kun her!</p>}<div className="tablewrap"><table className="datatable admin"><thead><tr><th>Navn</th><th>Mail</th><th>Afdeling</th><th className="num">Timepris</th><th>Startdato</th><th className="num">Lønnr.</th><th className="num" title="Flex-saldo ved start (timer, kan være negativ)">Start saldo</th><th className="num" title="Normtid pr. uge — sæt ned ved deltid. Fordeles automatisk man–fre">Norm/uge</th><th>Admin</th><th>Leder</th><th>Aktiv</th><th>Login</th></tr></thead><tbody>{rows.map(p => <tr className={p.active ? "" : "inaktiv"} key={p.id}><td><input value={p.name} onChange={g => patch(p.id, {
+  return <div>{pwInfo && <p className="ok pwinfo">🔑 {pwInfo} — skriv det ned, det vises kun her!</p>}<div className="row"><label>Ansat i <select value={employerFilter} onChange={g => setEmployerFilter(g.target.value)}><option value="">Alle selskaber</option><option value="none">Ikke angivet</option>{companies.filter(c => c.kind === "selskab").map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label><label>Sortér efter <select value={sortKey} onChange={g => setSortKey(g.target.value as SortKey)}><option value="name">Navn</option><option value="employer">Ansat i</option><option value="department">Afdeling</option></select></label><span className="muted small" style={{ alignSelf: "flex-end", paddingBottom: 10 }}>{shown.length} af {rows.length} medarbejdere</span></div><div className="tablewrap"><table className="datatable admin"><thead><tr><th>Navn</th><th>Mail</th><th>Afdeling</th><th title="Selskabet medarbejderen er ansat i">Ansat i</th><th className="num">Timepris</th><th>Startdato</th><th className="num">Lønnr.</th><th className="num" title="Flex-saldo ved start (timer, kan være negativ)">Start saldo</th><th className="num" title="Normtid pr. uge — sæt ned ved deltid. Fordeles automatisk man–fre">Norm/uge</th><th>Admin</th><th>Leder</th><th>Aktiv</th><th>Login</th></tr></thead><tbody>{shown.map(p => <tr className={p.active ? "" : "inaktiv"} key={p.id}><td><input value={p.name} onChange={g => patch(p.id, {
                 name: g.target.value
               })} /></td><td><input value={p.email || ""} onChange={g => patch(p.id, {
                 email: g.target.value
               })} /></td><td><select value={p.department || ""} onChange={g => patch(p.id, {
                 department: g.target.value
-              })}><option value="">—</option>{DEPARTMENTS.map(g => <option key={g}>{g}</option>)}</select></td><td><input className="hours" value={String(p.hourly_rate).replace(".", ",")} onChange={g => patch(p.id, {
+              })}><option value="">—</option>{DEPARTMENTS.map(g => <option key={g}>{g}</option>)}</select></td><td><select value={p.employer_company_id ?? ""} onChange={g => patch(p.id, {
+                employer_company_id: g.target.value ? Number(g.target.value) : null
+              })}><option value="">—</option>{employerOptions(p.employer_company_id).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></td><td><input className="hours" value={String(p.hourly_rate).replace(".", ",")} onChange={g => patch(p.id, {
                 hourly_rate: g.target.value
               })} /></td><td><input type="date" title="Dage før startdatoen tæller ikke som manglende" value={p.hired_date || ""} onChange={g => patch(p.id, {
                 hired_date: g.target.value
@@ -141,7 +174,10 @@ export function Medarbejdere({ flash }: { flash: (msg: string) => void }) {
       })} /><select value={draft.department} onChange={p => setDraft({
         ...draft,
         department: p.target.value
-      })}>{DEPARTMENTS.map(p => <option key={p}>{p}</option>)}</select><input className="hours" placeholder="Timepris" value={draft.rate} onChange={p => setDraft({
+      })}>{DEPARTMENTS.map(p => <option key={p}>{p}</option>)}</select><select title="Ansat i selskab" value={draft.employer} onChange={p => setDraft({
+        ...draft,
+        employer: p.target.value
+      })}><option value="">Ansat i —</option>{employerOptions(null).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select><input className="hours" placeholder="Timepris" value={draft.rate} onChange={p => setDraft({
         ...draft,
         rate: p.target.value
       })} /><input type="date" title="Startdato" value={draft.hired} onChange={p => setDraft({
@@ -168,6 +204,7 @@ export function Medarbejdere({ flash }: { flash: (msg: string) => void }) {
             name: draft.name,
             email: (draft.email || "").trim().toLowerCase() || null,
             department: draft.department,
+            employer_company_id: draft.employer ? Number(draft.employer) : null,
             hourly_rate: parseNum(draft.rate) ?? 0,
             is_admin: !!draft.admin,
             is_manager: !!draft.leder,
@@ -187,6 +224,7 @@ export function Medarbejdere({ flash }: { flash: (msg: string) => void }) {
       name: "",
       email: "",
       department: "Marketing",
+      employer: employerFilter && employerFilter !== "none" ? employerFilter : "",
       rate: "500",
       norm: "37",
       nr: "",

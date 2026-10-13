@@ -341,6 +341,8 @@ export interface EmployeeAdminRow {
   name: string;
   email: string | null;
   department: string | null;
+  /** "Ansat i selskab" (companies.id med kind = selskab); kun til visning/sortering. */
+  employer_company_id: number | null;
   is_admin: boolean;
   is_manager: boolean;
   active: boolean;
@@ -1198,7 +1200,7 @@ export const api = {
       supabase
         .from("employees")
         .select(
-          "id, name, email, department, is_admin, is_manager, active, hourly_rate, hired_date, payroll_number, weekly_norm, flex_start, auth_user_id",
+          "id, name, email, department, employer_company_id, is_admin, is_manager, active, hourly_rate, hired_date, payroll_number, weekly_norm, flex_start, auth_user_id",
         )
         .order("name"),
     ),
