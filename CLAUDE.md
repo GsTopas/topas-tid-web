@@ -91,6 +91,7 @@ Departments are a hard-coded list: Marketing, Økonomi, Digital Transformation, 
   - `billing_rules` move a project's hours and kr to target companies by `share`. Shares sum to ≤ 1 and any remainder stays on the project. A project with no rules is invoiced directly to its counterparty. Example: Projekt GL → ⅓ Topas Travel, ⅓ Hotel Icefiord, ⅓ Disko Line.
   - Invoice lines go per company, broken down by department × employee × task type × source project, with department subtotals. There is a PDF per company ("Timeopgørelse") and a combined PDF.
   - Totals are computed on unrounded numbers (a 1/3 split must not produce −0,01 noise).
+- **Ansat i selskab** (`employees.employer_company_id`, since 13 Oct 2026): which selskab (`companies.kind = selskab`) a person is employed in. Set in Settings → Medarbejdere (column "Ansat i"), which can filter and sort by it. Informational only; it does not affect rebilling.
 - **Hour pools** (`hour_budgets`) record how many hours a company bought from a department. `budget_plan` holds the leader's monthly plan. Both are readable only by their own department (and admins).
 - Danish formatting everywhere: comma decimals, `da-DK` thousands, dd.mm.yyyy. Inputs accept both "3,5" and "3.5". CSV exports use `;`, a BOM, and protection against formula injection.
 
