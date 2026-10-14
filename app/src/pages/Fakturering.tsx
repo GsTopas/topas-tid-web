@@ -161,6 +161,10 @@ export function Fakturering({ flash }: Props) {
       label: "Registreret (t)",
       num: true
     }, {
+      key: "fordel",
+      label: "Fordel (t)",
+      num: true
+    }, {
       key: "fakt",
       label: "Til fakturering (t)",
       num: true
@@ -171,20 +175,24 @@ export function Fakturering({ flash }: Props) {
     }]} rows={[...data.bill.map(b => ({
       selskab: b.type === "projekt" ? `🧩 ${b.selskab} (drift-projekt)` : b.selskab,
       reg: fmtNum(b.reg_t),
+      // Fordel = timer flyttet til/fra via fordelingsnøgler, så Registreret + Fordel = Til fakturering
+      fordel: fmtNum(b.fakt_t - b.reg_t),
       fakt: fmtNum(b.fakt_t),
       kr: fmtKr(b.fakt_kr)
     })), ...data.parkeret.map(p => ({
       selskab: `🗂️ ${p.selskab} — ${fmtNum(p.t)} t i perioden gemmes til senere afregning${p.expected ? ` (forventet ${fmtDate(p.expected)})` : ""}`,
       reg: "—",
+      fordel: "—",
       fakt: "—",
       kr: "—",
-      _cls: Object.fromEntries(["selskab", "reg", "fakt", "kr"].map(k => [k, "parkeret"]))
+      _cls: Object.fromEntries(["selskab", "reg", "fordel", "fakt", "kr"].map(k => [k, "parkeret"]))
     }))]} footer={{
       selskab: "I ALT (til fakturering nu)",
       reg: fmtNum(data.total.reg_t),
+      fordel: fmtNum(data.total.fakt_t - data.total.reg_t),
       fakt: fmtNum(data.total.fakt_t),
       kr: fmtKr(data.total.fakt_kr)
-    }} />{data.fordelt.t > 0.005 && <p className="muted small">{fmtNum(data.fordelt.t)} t ({fmtKr(data.fordelt.kr)} kr) registreret på drift-projekter er fordelt til selskaberne via fordelingsregler og indgår i "Til fakturering".</p>}<h3>Faktura-grundlag — klar til fakturering</h3><p className="muted small">Én linje pr. medarbejder og opgave — timerne står i kolonnen for deres timepris (100 / 500 / 850 kr), med subtotal pr. afdeling til bogføringen.</p><h4 className="faktgrp">🏢 Selskaber — faktureres for perioden</h4>{selskabsModtagere.length > 0 ? selskabsModtagere.map(renderInvoice) : <p className="muted small">Ingen selskabs-timer i den valgte periode.</p>}{projektModtagere.length > 0 && <><h4 className="faktgrp">🧩 Drift-projekter — faktureres for perioden</h4><p className="muted small">Projekter uden fordelingsregler faktureres direkte til projektets modpart.</p>{projektModtagere.map(renderInvoice)}</>}<h4 className="faktgrp">🗂️ Afslutningsprojekter — gemmes til senere afregning</h4>{samlede.length === 0 ? <p className="muted small">Ingen projekter samler til afslutning lige nu. Sæt typen til "Projekt (Samlet til afslutning)" i Settings → Projekter — så holdes timerne ude af månedsfakturaen og samles her, indtil projektet aktiveres.</p> : <><p className="muted small">Holdes ude af månedsfakturaen — beløbene er akkumuleret siden projektstart og faktureres/aktiveres først, når projektet afsluttes.</p>{samlede.map(p => <details className="fakt" key={p.comp}><summary><strong>{p.comp}</strong><span className="muted"> — {fmtNum(p.t)} t · {fmtKr(p.kr)} kr optjent{p.expected ? ` · forventes afregnet ${fmtDate(p.expected)}` : " · afregningsdato ikke sat"}</span>{p.lines.length > 0 && <button className="ghost pdfbtn" title="Download PDF med den akkumulerede opgørelse" onClick={e => {
+    }} />{data.fordelt.t > 0.005 && <p className="muted small">{fmtNum(data.fordelt.t)} t ({fmtKr(data.fordelt.kr)} kr) registreret på drift-projekter er fordelt til selskaberne via fordelingsregler (kolonnen "Fordel") og indgår i "Til fakturering".</p>}<h3>Faktura-grundlag — klar til fakturering</h3><p className="muted small">Én linje pr. medarbejder og opgave — timerne står i kolonnen for deres timepris (100 / 500 / 850 kr), med subtotal pr. afdeling til bogføringen.</p><h4 className="faktgrp">🏢 Selskaber — faktureres for perioden</h4>{selskabsModtagere.length > 0 ? selskabsModtagere.map(renderInvoice) : <p className="muted small">Ingen selskabs-timer i den valgte periode.</p>}{projektModtagere.length > 0 && <><h4 className="faktgrp">🧩 Drift-projekter — faktureres for perioden</h4><p className="muted small">Projekter uden fordelingsregler faktureres direkte til projektets modpart.</p>{projektModtagere.map(renderInvoice)}</>}<h4 className="faktgrp">🗂️ Afslutningsprojekter — gemmes til senere afregning</h4>{samlede.length === 0 ? <p className="muted small">Ingen projekter samler til afslutning lige nu. Sæt typen til "Projekt (Samlet til afslutning)" i Settings → Projekter — så holdes timerne ude af månedsfakturaen og samles her, indtil projektet aktiveres.</p> : <><p className="muted small">Holdes ude af månedsfakturaen — beløbene er akkumuleret siden projektstart og faktureres/aktiveres først, når projektet afsluttes.</p>{samlede.map(p => <details className="fakt" key={p.comp}><summary><strong>{p.comp}</strong><span className="muted"> — {fmtNum(p.t)} t · {fmtKr(p.kr)} kr optjent{p.expected ? ` · forventes afregnet ${fmtDate(p.expected)}` : " · afregningsdato ikke sat"}</span>{p.lines.length > 0 && <button className="ghost pdfbtn" title="Download PDF med den akkumulerede opgørelse" onClick={e => {
             e.preventDefault();
             e.stopPropagation();
             // sumT sendes med som i originalen, men bruges ikke af PDF-eksporten
