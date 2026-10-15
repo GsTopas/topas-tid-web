@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../../lib/api";
 import { parseNum } from "../../lib/format";
+import { isSimpleDepartment } from "../../lib/departments";
 import { DEPARTMENTS, SaveAllBar, keepDirty, randomTempPassword, saveDirtyRows, splitWeeklyNorm, sumNorm, useDirtyRows } from "./shared";
 
 type Employee = Awaited<ReturnType<typeof api.employeesAll>>[number];
@@ -9,6 +10,9 @@ type Company = Awaited<ReturnType<typeof api.companiesAll>>[number];
 /** Filter på "Ansat i": "" = alle, "none" = ikke angivet, ellers selskabets id. */
 type EmployerFilter = string;
 type SortKey = "name" | "employer" | "department";
+
+/** Enkel visning (fx Topas Travel) viderefakturerer ikke: timeprisen er tom og gemmes som 0. */
+const NO_RATE_TITLE = "Afdelingen viderefakturerer ikke, så den har ingen timepris";
 
 type EditedFields =
   | "name"
@@ -113,7 +117,7 @@ export function Medarbejdere({ flash }: { flash: (msg: string) => void }) {
         is_admin: p.is_admin,
         is_manager: p.is_manager,
         active: p.active,
-        hourly_rate: parseNum(String(p.hourly_rate)) ?? 0,
+        hourly_rate: isSimpleDepartment(p.department) ? 0 : parseNum(String(p.hourly_rate)) ?? 0,
         hired_date: p.hired_date || null,
         payroll_number: parsePayrollNumber(p.payroll_number),
         flex_start: parseNum(String(p.flex_start ?? 0)) ?? 0,
@@ -149,9 +153,9 @@ export function Medarbejdere({ flash }: { flash: (msg: string) => void }) {
                 department: g.target.value
               })}><option value="">—</option>{DEPARTMENTS.map(g => <option key={g}>{g}</option>)}</select></td><td><select value={p.employer_company_id ?? ""} onChange={g => patch(p.id, {
                 employer_company_id: g.target.value ? Number(g.target.value) : null
-              })}><option value="">—</option>{employerOptions(p.employer_company_id).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></td><td><input className="hours" value={String(p.hourly_rate).replace(".", ",")} onChange={g => patch(p.id, {
+              })}><option value="">—</option>{employerOptions(p.employer_company_id).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></td><td>{isSimpleDepartment(p.department) ? <input className="hours" value="" disabled title={NO_RATE_TITLE} /> : <input className="hours" value={String(p.hourly_rate).replace(".", ",")} onChange={g => patch(p.id, {
                 hourly_rate: g.target.value
-              })} /></td><td><input type="date" title="Dage før startdatoen tæller ikke som manglende" value={p.hired_date || ""} onChange={g => patch(p.id, {
+              })} />}</td><td><input type="date" title="Dage før startdatoen tæller ikke som manglende" value={p.hired_date || ""} onChange={g => patch(p.id, {
                 hired_date: g.target.value
               })} /></td><td><input className="hours" inputMode="numeric" title="Medarbejdernummer i lønsystemet (Lessor)" placeholder="fx 10012" value={p.payroll_number ?? ""} onChange={g => patch(p.id, {
                 payroll_number: g.target.value
@@ -177,10 +181,10 @@ export function Medarbejdere({ flash }: { flash: (msg: string) => void }) {
       })}>{DEPARTMENTS.map(p => <option key={p}>{p}</option>)}</select><select title="Ansat i selskab" value={draft.employer} onChange={p => setDraft({
         ...draft,
         employer: p.target.value
-      })}><option value="">Ansat i —</option>{employerOptions(null).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select><input className="hours" placeholder="Timepris" value={draft.rate} onChange={p => setDraft({
+      })}><option value="">Ansat i —</option>{employerOptions(null).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select>{isSimpleDepartment(draft.department) ? <input className="hours" placeholder="Timepris" value="" disabled title={NO_RATE_TITLE} /> : <input className="hours" placeholder="Timepris" value={draft.rate} onChange={p => setDraft({
         ...draft,
         rate: p.target.value
-      })} /><input type="date" title="Startdato" value={draft.hired} onChange={p => setDraft({
+      })} />}<input type="date" title="Startdato" value={draft.hired} onChange={p => setDraft({
         ...draft,
         hired: p.target.value
       })} /><input className="hours" inputMode="numeric" placeholder="Lønnr." title="Medarbejdernummer i lønsystemet (Lessor)" value={draft.nr} onChange={p => setDraft({
@@ -205,7 +209,7 @@ export function Medarbejdere({ flash }: { flash: (msg: string) => void }) {
             email: (draft.email || "").trim().toLowerCase() || null,
             department: draft.department,
             employer_company_id: draft.employer ? Number(draft.employer) : null,
-            hourly_rate: parseNum(draft.rate) ?? 0,
+            hourly_rate: isSimpleDepartment(draft.department) ? 0 : parseNum(draft.rate) ?? 0,
             is_admin: !!draft.admin,
             is_manager: !!draft.leder,
             active: true,

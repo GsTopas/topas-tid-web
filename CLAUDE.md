@@ -64,7 +64,7 @@ Commands (run in `app/`): `npm ci`, `npm run dev`, `npm run typecheck`, `npm tes
 
 Departments are a hard-coded list in `app/src/lib/departments.ts`: Marketing, Økonomi, Digital Transformation, IT, Hotel & Administration, Topas Travel.
 
-**Enkel visning** (`SIMPLE_DEPARTMENTS`, since 15 Oct 2026: Topas Travel): the department uses the app for løn, ferie and fravær only. Min tid keeps mødt/gået/frokost, fravær and ferie but has no Timefordeling (saves no allocations, so nothing is rebilled), a day with hours is 🟢 (also ✓ in Afdelings overblik), Min periode drops "Fordelt" and the per-project table, and the tabs Afdelings indsigt and Settings are hidden for them (unless can_economy). The view follows the person being registered for.
+**Enkel visning** (`SIMPLE_DEPARTMENTS`, since 15 Oct 2026: Topas Travel): the department uses the app for løn, ferie and fravær only. Min tid keeps mødt/gået/frokost, fravær and ferie but has no Timefordeling (saves no allocations, so nothing is rebilled), a day with hours is 🟢 (also ✓ in Afdelings overblik), Min periode drops "Fordelt" and the per-project table, and the tabs Afdelings indsigt and Settings are hidden for them (unless can_economy). In Settings → Medarbejdere their Timepris is blank and saved as 0. The view follows the person being registered for.
 
 ## Domain rules (keep these when building features)
 
