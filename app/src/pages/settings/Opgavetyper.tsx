@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, type SessionEmployee } from "../../lib/api";
+import { isSimpleDepartment } from "../../lib/departments";
 import { DEPARTMENTS, SaveAllBar, confirmDiscard, keepDirty, saveDirtyRows, useDirtyRows } from "./shared";
 
 type TaskType = Awaited<ReturnType<typeof api.taskTypesFor>>[number];
@@ -55,7 +56,7 @@ export function Opgavetyper({
     edits.reset();
     api.taskTypesFor(dept).then(list => setRows(list as TaskTypeRow[]));
   };
-  return <div>{ownDeptOnly ? <p className="muted small">Opgavetyper for din afdeling: <b>{dept}</b></p> : <select value={dept} onChange={g => confirmDiscard() && setDept(g.target.value)}>{DEPARTMENTS.map(g => <option key={g}>{g}</option>)}</select>}<table className="datatable admin slim"><thead><tr><th>Opgavetype</th><th className="num">Sortering</th><th>Aktiv</th></tr></thead><tbody>{rows.map(g => <tr className={g.active ? "" : "inaktiv"} key={g.id}><td><input value={g.name} onChange={d => patch(g.id, {
+  return <div>{ownDeptOnly ? <p className="muted small">Opgavetyper for din afdeling: <b>{dept}</b></p> : <select value={dept} onChange={g => confirmDiscard() && setDept(g.target.value)}>{DEPARTMENTS.filter(g => !isSimpleDepartment(g)).map(g => <option key={g}>{g}</option>)}</select>}<table className="datatable admin slim"><thead><tr><th>Opgavetype</th><th className="num">Sortering</th><th>Aktiv</th></tr></thead><tbody>{rows.map(g => <tr className={g.active ? "" : "inaktiv"} key={g.id}><td><input value={g.name} onChange={d => patch(g.id, {
               name: d.target.value
             })} /></td><td><input className="hours" value={g.sort} onChange={d => patch(g.id, {
               sort: d.target.value

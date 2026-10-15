@@ -62,7 +62,9 @@ Commands (run in `app/`): `npm ci`, `npm run dev`, `npm run typecheck`, `npm tes
 | Økonomi + `is_manager`, or `is_admin` | "can_economy": all departments, Fakturering, Fravær & løn, payroll lock. *Why:* since 28 Sep, merely being *in* Økonomi no longer grants full insight |
 | `is_admin` | Employees, logins, billing rules, project access. Admin does **not** override the leader approval (removed 25 Aug: only the department's own leader approves) |
 
-Departments are a hard-coded list: Marketing, Økonomi, Digital Transformation, IT, Hotel & Administration.
+Departments are a hard-coded list in `app/src/lib/departments.ts`: Marketing, Økonomi, Digital Transformation, IT, Hotel & Administration, Topas Travel.
+
+**Enkel visning** (`SIMPLE_DEPARTMENTS`, since 15 Oct 2026: Topas Travel): the department uses the app for løn, ferie and fravær only. Min tid keeps mødt/gået/frokost, fravær and ferie but has no Timefordeling (saves no allocations, so nothing is rebilled), a day with hours is 🟢 (also ✓ in Afdelings overblik), Min periode drops "Fordelt" and the per-project table, and the tabs Afdelings indsigt and Settings are hidden for them (unless can_economy). The view follows the person being registered for.
 
 ## Domain rules (keep these when building features)
 

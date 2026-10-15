@@ -34,6 +34,8 @@ type Props = {
   boot: Boot;
   normHours: number;
   totals: FormTotals;
+  /** Enkel visning (fx Topas Travel): ingen timefordeling. */
+  simple?: boolean;
   patch: (p: Partial<DayFormState>) => void;
   updateAlloc: (idx: number, p: Partial<AllocLine>) => void;
   missingTask: (line: AllocLine) => boolean;
@@ -42,7 +44,7 @@ type Props = {
   onSaveDefaults: () => void;
 };
 
-export function DayForm({ form, setForm, date, boot, normHours, totals, patch, updateAlloc, missingTask, partialAbsence, onSaveDefaults }: Props) {
+export function DayForm({ form, setForm, date, boot, normHours, totals, simple = false, patch, updateAlloc, missingTask, partialAbsence, onSaveDefaults }: Props) {
   const { isWorkDay, isAbsenceDay, total, allocated, remaining, pct, over, done, taskRequired } = totals;
   return <section className="dayform"><h2>{WEEKDAYS_LONG[weekdayIdx(date)]} {fmtDate(date)}</h2>{normHours > 0 && <span className="muted">Normal arbejdstid: {fmtNum(normHours)} timer</span>}<div className="types">{DAY_TYPES.map(([type, icon]) => <button className={"type" + (form.day_type === type ? " sel" : "")} onClick={() => patch({
         day_type: type
@@ -93,7 +95,7 @@ export function DayForm({ form, setForm, date, boot, normHours, totals, patch, u
       return <p className={"small " + (Math.abs(diff) > 0.01 ? "warn" : "muted")}>Arbejde + fravær = {fmtNum(sum)} t{Math.abs(diff) > 0.01 ? ` — afvigelse ${diff > 0 ? "+" : ""}${fmtNum(diff)} t fra normal tid` : " (= normal tid)"}</p>;
     })()}<input className="wide" placeholder="Note om dagen (fx været til kursus, fysio …)" value={form.note} onChange={e => patch({
       note: e.target.value
-    })} />{isWorkDay && <><h3>Timefordeling</h3><table className="alloc"><thead><tr><th>Virksomhed/projekt</th>{boot.task_options.length > 0 && <th>Opgavetype</th>}<th>Timer</th><th>Opgavenote</th><th /></tr></thead><tbody>{form.allocations.map((line, idx) => <tr key={idx}><td className="a-comp" data-label="Virksomhed/projekt"><select value={line.company_id || ""} onChange={e => updateAlloc(idx, {
+    })} />{isWorkDay && !simple && <><h3>Timefordeling</h3><table className="alloc"><thead><tr><th>Virksomhed/projekt</th>{boot.task_options.length > 0 && <th>Opgavetype</th>}<th>Timer</th><th>Opgavenote</th><th /></tr></thead><tbody>{form.allocations.map((line, idx) => <tr key={idx}><td className="a-comp" data-label="Virksomhed/projekt"><select value={line.company_id || ""} onChange={e => updateAlloc(idx, {
                 company_id: e.target.value
               })}><option value="">— vælg —</option>{boot.companies.map(c => <option value={c.id} key={c.id}>{c.name}</option>)}</select></td>{boot.task_options.length > 0 && <td className="a-task" data-label="Opgavetype"><select value={line.task_type} className={missingTask(line) ? "mangler" : ""} onChange={e => updateAlloc(idx, {
                 task_type: e.target.value

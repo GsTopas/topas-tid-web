@@ -5,6 +5,7 @@ import { api, type SessionEmployee } from "../lib/api";
 import { downloadCsv } from "../lib/csv";
 import { addDays, approvedByText, fmtDate } from "../lib/format";
 import { dayNorm, splitsByEmployee, type NormSplit } from "../lib/norm";
+import { DEPARTMENTS, isSimpleDepartment } from "../lib/departments";
 
 type Matrix = Awaited<ReturnType<typeof api.ecoMatrix>>;
 type MatrixEmployee = Matrix["employees"][number];
@@ -20,7 +21,7 @@ const ABSENCE_LETTER: Record<string, string> = {
 };
 
 /** Afdelingsfilter for økonomi (`Bj`). */
-const FILTER_DEPARTMENTS = ["Marketing", "Økonomi", "Digital Transformation", "IT", "Hotel & Administration"];
+const FILTER_DEPARTMENTS = DEPARTMENTS;
 
 type Cell = { c: string; cls: string };
 type MatrixRow = {
@@ -116,7 +117,8 @@ export function AfdelingsOverblik({ emp, flash }: { emp: SessionEmployee | null;
         if (W) {
           if (W.location) {
             const workHours = Number(W.work_hours || 0);
-            if (workHours > 0 && Math.abs((allocByKey[`${I.id}|${V}`] || 0) - workHours) <= 0.01) {
+            // Enkel visning (fx Topas Travel) fordeler ikke timer: en arbejdsdag med timer er udfyldt.
+            if (workHours > 0 && (isSimpleDepartment(I.department) || Math.abs((allocByKey[`${I.id}|${V}`] || 0) - workHours) <= 0.01)) {
               return {
                 c: "✓",
                 cls: "m-ok"

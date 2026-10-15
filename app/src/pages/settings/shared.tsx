@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
-/** Afdelinger (minified `Hd`). */
-export const DEPARTMENTS = ["Marketing", "Økonomi", "Digital Transformation", "IT", "Hotel & Administration"];
+/** Afdelinger (minified `Hd`); listen bor i lib/departments. */
+export { DEPARTMENTS } from "../../lib/departments";
 
 /** Summen af en ugenorm (array af dagstimer); ikke-array tæller som 0 (`Lb`). */
 export const sumNorm = (norm: unknown): number =>
