@@ -452,6 +452,7 @@ export interface ApprovalRow {
 export interface ProxyEmployee {
   id: number;
   name: string;
+  department: string | null;
   weekly_norm: WeeklyNorm;
   hired_date: string | null;
 }
@@ -1458,7 +1459,7 @@ export const api = {
   },
 
   proxyEmployees: (): Promise<ProxyEmployee[]> =>
-    q<ProxyEmployee>(supabase.from("employees").select("id, name, weekly_norm, hired_date").eq("active", true).order("name")),
+    q<ProxyEmployee>(supabase.from("employees").select("id, name, department, weekly_norm, hired_date").eq("active", true).order("name")),
 
   /** Kalder edge function "onboard" (opret/nulstil login). */
   async manageLogin(action: string, email: string, password?: string): Promise<unknown> {

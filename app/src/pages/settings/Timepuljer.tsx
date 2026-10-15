@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api, type SessionEmployee } from "../../lib/api";
 import { fmtNum, parseNum } from "../../lib/format";
 import { DEPARTMENTS } from "./shared";
+import { isSimpleDepartment } from "../../lib/departments";
 
 type Company = Awaited<ReturnType<typeof api.companiesAll>>[number];
 type Budget = Awaited<ReturnType<typeof api.budgetsFor>>[number];
@@ -64,7 +65,7 @@ export function Timepuljer({ flash, emp }: { flash: (msg: string) => void; emp: 
       })}>{companies.map(g => <option value={g.id} key={g.id}>{g.name}</option>)}</select>{ownDeptOnly ? <span className="muted">{draft.department}</span> : <select value={draft.department} onChange={g => setDraft({
         ...draft,
         department: g.target.value
-      })}>{DEPARTMENTS.map(g => <option key={g}>{g}</option>)}</select>}<select value={draft.period_type} onChange={g => setDraft({
+      })}>{DEPARTMENTS.filter(g => !isSimpleDepartment(g)).map(g => <option key={g}>{g}</option>)}</select>}<select value={draft.period_type} onChange={g => setDraft({
         ...draft,
         period_type: g.target.value
       })}><option value="month">timer pr. måned</option><option value="year">timer pr. år</option></select><input className="hours" placeholder="Timer" value={draft.hours} onChange={g => setDraft({

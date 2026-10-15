@@ -3,6 +3,7 @@ import { api, type Boot } from "../lib/api";
 import { fmtDate, fmtNum, weekdayIdx } from "../lib/format";
 import { HALF_HOLIDAY } from "../lib/ferie";
 import { dayNorm, type NormSplit } from "../lib/norm";
+import { isSimpleDepartment } from "../lib/departments";
 
 const fmtSigned = (n: number) => (n >= 0 ? "+" : "") + fmtNum(n);
 import { DataTable, type Row } from "../components/DataTable";
@@ -59,6 +60,8 @@ export function MinPeriode({ boot }: { boot: Boot }) {
   const normFor = (iso: string) => dayNorm(norm, splits, iso);
   const isSelf = empId === me?.id;
   const who = isSelf ? "Du" : selected?.name || "Medarbejderen";
+  /** Enkel visning (fx Topas Travel): ingen fordeling på projekter, så kolonnen "Fordelt" udelades. */
+  const simple = isSimpleDepartment(isSelf ? me?.department : selected?.department);
   const rows: Row[] = [];
   let date = period.start_date;
   let sumWork = 0;
@@ -131,11 +134,11 @@ export function MinPeriode({ boot }: { boot: Boot }) {
       key: "arb",
       label: "Arbejdstid",
       num: true
-    }, {
+    }, ...(simple ? [] : [{
       key: "ford",
       label: "Fordelt",
       num: true
-    }, {
+    }]), {
       key: "ktrl",
       label: "Kontrol",
       num: true
@@ -164,7 +167,7 @@ export function MinPeriode({ boot }: { boot: Boot }) {
       ford: "",
       ktrl: <span className="saldo">{saldo ? fmtSigned(saldo.start + saldo.kontrol) : "…"}</span>,
       note: ""
-    }]} />{Math.abs(sumAllocated - sumWork) > 0.01 && <p className="warn small">⚠ {who} har fordelt {fmtNum(sumAllocated)} af {fmtNum(sumWork)} arbejdstimer på projekter — {isSelf ? "gå til Min tid og fordel resten" : "resten skal fordeles"} på dagene markeret med ⚠.</p>}{data.comp_sums.length > 0 && <Fragment><h3>{isSelf ? "Mine" : `${selected?.name || "Medarbejderens"}s`} timer pr. projekt/selskab</h3><DataTable cols={[{
+    }]} />{!simple && Math.abs(sumAllocated - sumWork) > 0.01 && <p className="warn small">⚠ {who} har fordelt {fmtNum(sumAllocated)} af {fmtNum(sumWork)} arbejdstimer på projekter — {isSelf ? "gå til Min tid og fordel resten" : "resten skal fordeles"} på dagene markeret med ⚠.</p>}{!simple && data.comp_sums.length > 0 && <Fragment><h3>{isSelf ? "Mine" : `${selected?.name || "Medarbejderens"}s`} timer pr. projekt/selskab</h3><DataTable cols={[{
         key: "comp",
         label: "Projekt/selskab"
       }, {

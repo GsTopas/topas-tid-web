@@ -4,8 +4,9 @@ import type { DayStatusMap } from "./types";
 /**
  * Statusikon for en dag i kalenderen:
  * fravær > arbejde → fraværsikon, fuldt fordelt → 🟢, ellers 🟠; manglende arbejdsdag til og med i dag → 🔴.
+ * Med enkel visning (`simple`, ingen fordeling) er en arbejdsdag med timer 🟢.
  */
-export function dayStatusIcon(date: string, dayStatus: DayStatusMap, isOff: boolean, today: string): string {
+export function dayStatusIcon(date: string, dayStatus: DayStatusMap, isOff: boolean, today: string, simple = false): string {
   const s = dayStatus[date];
   if (s != null && s.entry) {
     const e = s.entry;
@@ -13,7 +14,7 @@ export function dayStatusIcon(date: string, dayStatus: DayStatusMap, isOff: bool
       const worked = Number(e.work_hours || 0);
       if (e.absence_type && Number(e.absence_hours || 0) > worked) {
         return ABSENCE_ICONS[String(e.absence_type)] || "📋";
-      } else if (worked > 0 && Math.abs((s.alloc || 0) - worked) <= 0.01) {
+      } else if (worked > 0 && (simple || Math.abs((s.alloc || 0) - worked) <= 0.01)) {
         return "🟢";
       } else {
         return "🟠";

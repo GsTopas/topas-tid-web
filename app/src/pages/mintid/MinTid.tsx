@@ -3,6 +3,7 @@ import { api, type Boot, type Period, type SessionEmployee } from "../../lib/api
 import { addDays, approvedByText, fmtDate, fmtNum, parseNum, weekdayIdx } from "../../lib/format";
 import { PeriodSelect } from "../../components/PeriodPicker";
 import { confirmDiscard } from "../settings/shared";
+import { isSimpleDepartment } from "../../lib/departments";
 import { ABSENCE_TYPES, absenceCodeFor, toDbDayType, WEEKDAYS_LONG, WORK_DAY_TYPES } from "./constants";
 import { DayForm, type FormTotals } from "./DayForm";
 import { NormUge } from "./NormUge";
@@ -27,6 +28,8 @@ export function MinTid({ mt, period, boot, setBoot, emp, periods, flash }: Props
   const { dayStatus, form, setForm, saving, setSaving, bulkFrom, setBulkFrom, bulkTo, setBulkTo, proxyList, proxyEmp, setProxyEmp, economyApproved, leaderApproval, leaderLocked, normFor, beforeHired, reloadDays } = mt;
   const selectedDate = mt.selectedDate as string;
 
+  /** Enkel visning (fx Topas Travel): kun dagen, fravær og ferie; ingen timefordeling. Følger den, der registreres for. */
+  const simple = isSimpleDepartment(proxyEmp ? proxyEmp.department : emp.department);
   const isWorkDay = form && WORK_DAY_TYPES.includes(form.day_type);
   const isAbsenceDay = form && ABSENCE_TYPES.includes(form.day_type);
   const total = isWorkDay && parseNum(form.work_hours) || 0;
@@ -35,7 +38,7 @@ export function MinTid({ mt, period, boot, setBoot, emp, periods, flash }: Props
   const pct = total > 0 ? Math.min(allocated / total * 100, 100) : 0;
   const over = total > 0 && allocated - total > 0.01;
   const done = total > 0 && Math.abs(remaining) <= 0.01;
-  const taskRequired = boot.task_options.length > 0 && emp.department !== "Hotel & Administration";
+  const taskRequired = !simple && boot.task_options.length > 0 && emp.department !== "Hotel & Administration";
   const missingTask = (line: AllocLine): boolean => !!(taskRequired && line.company_id && (parseNum(line.hours) || 0) > 0 && !line.task_type);
   const isOff = (d: string) => normFor(d) <= 0 || beforeHired(d);
 
@@ -73,7 +76,7 @@ export function MinTid({ mt, period, boot, setBoot, emp, periods, flash }: Props
       time_out: isWorkDay ? h.time_out : null,
       work_hours: isWorkDay ? parseNum(h.work_hours) : null,
       note: h.note || null,
-      allocations: isWorkDay ? h.allocations.filter(l => l.company_id && (parseNum(l.hours) || 0) > 0).map(l => ({
+      allocations: isWorkDay && !simple ? h.allocations.filter(l => l.company_id && (parseNum(l.hours) || 0) > 0).map(l => ({
         company_id: Number(l.company_id),
         task_type: l.task_type || "",
         hours: parseNum(l.hours),
@@ -150,7 +153,7 @@ export function MinTid({ mt, period, boot, setBoot, emp, periods, flash }: Props
       await api.saveDay(buildPayload(selectedDate), proxyEmp?.id);
       const map = await reloadDays();
       mt.markSaved();
-      if (isWorkDay && Math.abs(remaining) > 0.01) {
+      if (isWorkDay && !simple && Math.abs(remaining) > 0.01) {
         flash(`⚠️ Gemt — men kun ${fmtNum(allocated)} af ${fmtNum(total)} t er fordelt`);
       } else {
         flash(`${fmtDate(selectedDate)} gemt ✓`);
@@ -166,7 +169,7 @@ export function MinTid({ mt, period, boot, setBoot, emp, periods, flash }: Props
 
   const saveDay = async () => {
     const map = await persistDay();
-    if (map && !(isWorkDay && Math.abs(remaining) > 0.01)) {
+    if (map && !(isWorkDay && !simple && Math.abs(remaining) > 0.01)) {
       // Hop videre til næste arbejdsdag (til og med i dag) uden registrering.
       // NOTE(recovery): her tjekkes ikke ansættelsesdato (i modsætning til ved periodeskift) — bevaret.
       const next = mt.days.find(d => d > selectedDate && d <= boot.today && normFor(d) > 0 && (map[d] == null || !map[d].entry));
@@ -234,10 +237,10 @@ export function MinTid({ mt, period, boot, setBoot, emp, periods, flash }: Props
         setBulkFrom("");
         setBulkTo("");
       })} /> : <span className="muted">{period.month_name} {period.year} · {fmtDate(period.start_date)} – {fmtDate(period.end_date)}</span>}{proxySelect}{period.locked && <span className="warn">🔒 Låst af økonomi — kan ses, men ikke rettes</span>}{!period.locked && economyApproved && <span className="warn">🔒 {proxyEmp ? proxyEmp.name + " er" : "Du er"} godkendt af økonomi for denne periode — kan ikke rettes</span>}{!period.locked && !economyApproved && leaderApproval && <span className={leaderLocked ? "warn" : "muted small"} title={approvedByText("Godkendt", leaderApproval.name, leaderApproval.at)}>{leaderLocked ? "🔒 Din leder har godkendt perioden — kan ses, men ikke rettes. Kontakt din leder, hvis noget skal ændres" : "✓ Leder-godkendt — medarbejderen kan ikke længere rette, men du kan"}</span>}</div>
-    <PeriodCalendar weeks={mt.weeks} selectedDate={mt.selectedDate} today={boot.today} isOff={isOff} icon={d => dayStatusIcon(d, dayStatus, isOff(d), boot.today)} onSelect={d => d !== mt.selectedDate && guard(() => mt.setSelectedDate(d))} />
-    {form && <DayForm form={form} setForm={setForm} date={selectedDate} boot={boot} normHours={normFor(selectedDate)} totals={totals} patch={patch} updateAlloc={updateAlloc} missingTask={missingTask} partialAbsence={partialAbsence} onSaveDefaults={saveDefaults} />}
-    {form && <details className="bulk"><summary>🗓️ Registrér flere dage på én gang</summary><p className="muted small">Udfyld dagen ovenfor (fx Ferie eller Kontor med fordeling), vælg et interval — samme indhold gemmes på alle hverdage i intervallet.</p><div className="row"><label>Fra<input type="date" value={bulkFrom || selectedDate} min={period.start_date} max={period.end_date} onChange={e => setBulkFrom(e.target.value)} /></label><label>Til<input type="date" value={bulkTo || selectedDate} min={period.start_date} max={period.end_date} onChange={e => setBulkTo(e.target.value)} /></label><button className="primary" disabled={saving || locked} onClick={saveRange}>{locked ? "🔒 Låst" : saving ? "Gemmer…" : "💾 Gem dagene"}</button></div></details>}
-    {form && <div className="savebar"><span className="muted">{WEEKDAYS_LONG[weekdayIdx(selectedDate)]} {fmtDate(selectedDate)}{isWorkDay && ` · ${fmtNum(allocated)} / ${fmtNum(total)} t fordelt`}</span><button className="primary" disabled={saving || locked} onClick={saveDay}>{locked ? "🔒 Perioden er låst" : saving ? "Gemmer…" : "💾 Gem dagen"}</button></div>}
+    <PeriodCalendar weeks={mt.weeks} selectedDate={mt.selectedDate} today={boot.today} isOff={isOff} icon={d => dayStatusIcon(d, dayStatus, isOff(d), boot.today, simple)} onSelect={d => d !== mt.selectedDate && guard(() => mt.setSelectedDate(d))} />
+    {form && <DayForm form={form} setForm={setForm} date={selectedDate} boot={boot} normHours={normFor(selectedDate)} totals={totals} simple={simple} patch={patch} updateAlloc={updateAlloc} missingTask={missingTask} partialAbsence={partialAbsence} onSaveDefaults={saveDefaults} />}
+    {form && <details className="bulk"><summary>🗓️ Registrér flere dage på én gang</summary><p className="muted small">Udfyld dagen ovenfor (fx Ferie eller Kontor{simple ? "" : " med fordeling"}), vælg et interval — samme indhold gemmes på alle hverdage i intervallet.</p><div className="row"><label>Fra<input type="date" value={bulkFrom || selectedDate} min={period.start_date} max={period.end_date} onChange={e => setBulkFrom(e.target.value)} /></label><label>Til<input type="date" value={bulkTo || selectedDate} min={period.start_date} max={period.end_date} onChange={e => setBulkTo(e.target.value)} /></label><button className="primary" disabled={saving || locked} onClick={saveRange}>{locked ? "🔒 Låst" : saving ? "Gemmer…" : "💾 Gem dagene"}</button></div></details>}
+    {form && <div className="savebar"><span className="muted">{WEEKDAYS_LONG[weekdayIdx(selectedDate)]} {fmtDate(selectedDate)}{isWorkDay && (simple ? ` · ${fmtNum(total)} t` : ` · ${fmtNum(allocated)} / ${fmtNum(total)} t fordelt`)}</span><button className="primary" disabled={saving || locked} onClick={saveDay}>{locked ? "🔒 Perioden er låst" : saving ? "Gemmer…" : "💾 Gem dagen"}</button></div>}
     {pendingNav && <div className="modal-backdrop" onClick={stay} onKeyDown={e => e.key === "Escape" && stay()}><div className="modal" role="dialog" aria-modal="true" aria-labelledby="ikkegemt-titel" onClick={e => e.stopPropagation()}><h3 id="ikkegemt-titel">Du har ikke gemt din dag</h3><p className="muted">{WEEKDAYS_LONG[weekdayIdx(selectedDate)]} {fmtDate(selectedDate)} har ændringer, der ikke er gemt. Vil du gemme dagen?</p><div className="modal-actions"><button className="ghost" onClick={stay}>Bliv på dagen</button><button className="ghost" onClick={discardAndGo}>Fortsæt uden at gemme</button><button className="primary" autoFocus disabled={saving} onClick={saveAndGo}>{saving ? "Gemmer…" : "💾 Gem og fortsæt"}</button></div></div></div>}
   </>;
 }
