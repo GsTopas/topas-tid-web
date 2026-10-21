@@ -9,6 +9,7 @@ import { DayForm, type FormTotals } from "./DayForm";
 import { NormUge } from "./NormUge";
 import { dayStatusIcon, PeriodCalendar } from "./PeriodCalendar";
 import type { AllocLine, DayFormState, DayPayload } from "./types";
+import { lineReady } from "./unsaved";
 import type { MinTidState } from "./useMinTid";
 
 type Props = {
@@ -144,8 +145,9 @@ export function MinTid({ mt, period, boot, setBoot, emp, periods, flash }: Props
     }
   };
 
-  /** Gemmer den valgte dag; giver kalenderstatus tilbage, eller null hvis den ikke blev gemt. */
-  const persistDay = async () => {
+  /** Gemmer den valgte dag; giver kalenderstatus tilbage, eller null hvis den ikke blev gemt.
+   *  `auto` = gemt automatisk ved "➕ Tilføj linje" (egen besked, da fordelingen typisk ikke er færdig endnu). */
+  const persistDay = async (auto = false) => {
     if (isWorkDay && (form as DayFormState).allocations.some(missingTask)) {
       flash("❌ Vælg opgavetype på alle timelinjer — opgavetype er obligatorisk");
       return null;
@@ -155,7 +157,9 @@ export function MinTid({ mt, period, boot, setBoot, emp, periods, flash }: Props
       await api.saveDay(buildPayload(selectedDate), proxyEmp?.id);
       const map = await reloadDays();
       mt.markSaved();
-      if (isWorkDay && !simple && Math.abs(remaining) > 0.01) {
+      if (auto) {
+        flash(`✓ Linjen er gemt (${fmtNum(allocated)} af ${fmtNum(total)} t fordelt)`);
+      } else if (isWorkDay && !simple && Math.abs(remaining) > 0.01) {
         flash(`⚠️ Gemt — men kun ${fmtNum(allocated)} af ${fmtNum(total)} t er fordelt`);
       } else {
         flash(`${fmtDate(selectedDate)} gemt ✓`);
@@ -199,6 +203,24 @@ export function MinTid({ mt, period, boot, setBoot, emp, periods, flash }: Props
   };
 
   const locked = period.locked || economyApproved || leaderLocked;
+  /** "➕ Tilføj linje": ny tom linje — og er den forrige linje udfyldt, gemmes dagen automatisk (som "Gem dagen", men man bliver på dagen). */
+  const addLine = () => {
+    const lines = (form as DayFormState).allocations;
+    const last = lines[lines.length - 1];
+    const autosave = !locked && !saving && mt.unsaved && !!last && lineReady(last, taskRequired) && !lines.some(missingTask);
+    setForm(prev => ({
+      ...(prev as DayFormState),
+      allocations: [...(prev as DayFormState).allocations, {
+        company_id: "",
+        task_type: "",
+        hours: "",
+        task_note: ""
+      }]
+    }));
+    if (autosave) {
+      void persistDay(true);
+    }
+  };
   const totals: FormTotals = {
     isWorkDay: !!isWorkDay,
     isAbsenceDay: !!isAbsenceDay,
@@ -240,7 +262,7 @@ export function MinTid({ mt, period, boot, setBoot, emp, periods, flash }: Props
         setBulkTo("");
       })} /> : <span className="muted">{period.month_name} {period.year} · {fmtDate(period.start_date)} – {fmtDate(period.end_date)}</span>}{proxySelect}{period.locked && <span className="warn">🔒 Låst af økonomi — kan ses, men ikke rettes</span>}{!period.locked && economyApproved && <span className="warn">🔒 {proxyEmp ? proxyEmp.name + " er" : "Du er"} godkendt af økonomi for denne periode — kan ikke rettes</span>}{!period.locked && !economyApproved && leaderApproval && <span className={leaderLocked ? "warn" : "muted small"} title={approvedByText("Godkendt", leaderApproval.name, leaderApproval.at)}>{leaderLocked ? "🔒 Din leder har godkendt perioden — kan ses, men ikke rettes. Kontakt din leder, hvis noget skal ændres" : "✓ Leder-godkendt — medarbejderen kan ikke længere rette, men du kan"}</span>}</div>
     <PeriodCalendar weeks={mt.weeks} selectedDate={mt.selectedDate} today={boot.today} isOff={isOff} icon={d => dayStatusIcon(d, dayStatus, isOff(d), boot.today, simple)} onSelect={d => d !== mt.selectedDate && guard(() => mt.setSelectedDate(d))} />
-    {form && <DayForm form={form} setForm={setForm} date={selectedDate} boot={boot} normHours={normFor(selectedDate)} totals={totals} simple={simple} patch={patch} updateAlloc={updateAlloc} missingTask={missingTask} partialAbsence={partialAbsence} onSaveDefaults={saveDefaults} />}
+    {form && <DayForm form={form} setForm={setForm} date={selectedDate} boot={boot} normHours={normFor(selectedDate)} totals={totals} simple={simple} patch={patch} updateAlloc={updateAlloc} missingTask={missingTask} partialAbsence={partialAbsence} onSaveDefaults={saveDefaults} onAddLine={addLine} />}
     {form && <details className="bulk"><summary>🗓️ Registrér flere dage på én gang</summary><p className="muted small">Udfyld dagen ovenfor (fx Ferie eller Kontor{simple ? "" : " med fordeling"}), vælg et interval — samme indhold gemmes på alle hverdage i intervallet.</p><div className="row"><label>Fra<input type="date" value={bulkFrom || selectedDate} min={period.start_date} max={period.end_date} onChange={e => setBulkFrom(e.target.value)} /></label><label>Til<input type="date" value={bulkTo || selectedDate} min={period.start_date} max={period.end_date} onChange={e => setBulkTo(e.target.value)} /></label><button className="primary" disabled={saving || locked} onClick={saveRange}>{locked ? "🔒 Låst" : saving ? "Gemmer…" : "💾 Gem dagene"}</button></div></details>}
     {form && <div className="savebar"><span className="muted">{WEEKDAYS_LONG[weekdayIdx(selectedDate)]} {fmtDate(selectedDate)}{isWorkDay && (simple ? ` · ${fmtNum(total)} t` : ` · ${fmtNum(allocated)} / ${fmtNum(total)} t fordelt`)}</span><button className="primary" disabled={saving || locked} onClick={saveDay}>{locked ? "🔒 Perioden er låst" : saving ? "Gemmer…" : "💾 Gem dagen"}</button></div>}
     {pendingNav && <div className="modal-backdrop" onClick={stay} onKeyDown={e => e.key === "Escape" && stay()}><div className="modal" role="dialog" aria-modal="true" aria-labelledby="ikkegemt-titel" onClick={e => e.stopPropagation()}><h3 id="ikkegemt-titel">Du har ikke gemt din dag</h3><p className="muted">{WEEKDAYS_LONG[weekdayIdx(selectedDate)]} {fmtDate(selectedDate)} har ændringer, der ikke er gemt. Vil du gemme dagen?</p><div className="modal-actions"><button className="ghost" onClick={stay}>Bliv på dagen</button><button className="ghost" onClick={discardAndGo}>Fortsæt uden at gemme</button><button className="primary" autoFocus disabled={saving} onClick={saveAndGo}>{saving ? "Gemmer…" : "💾 Gem og fortsæt"}</button></div></div></div>}

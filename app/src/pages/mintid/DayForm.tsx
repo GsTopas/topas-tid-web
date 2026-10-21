@@ -42,9 +42,11 @@ type Props = {
   /** Delvist fravær (timer) på en arbejdsdag. */
   partialAbsence: () => number;
   onSaveDefaults: () => void;
+  /** "➕ Tilføj linje": tilføjer en tom linje og gemmer dagen, hvis den forrige linje er udfyldt. */
+  onAddLine: () => void;
 };
 
-export function DayForm({ form, setForm, date, boot, normHours, totals, simple = false, patch, updateAlloc, missingTask, partialAbsence, onSaveDefaults }: Props) {
+export function DayForm({ form, setForm, date, boot, normHours, totals, simple = false, patch, updateAlloc, missingTask, partialAbsence, onSaveDefaults, onAddLine }: Props) {
   const { isWorkDay, isAbsenceDay, total, allocated, remaining, pct, over, done, taskRequired } = totals;
   return <section className="dayform"><h2>{WEEKDAYS_LONG[weekdayIdx(date)]} {fmtDate(date)}</h2>{normHours > 0 && <span className="muted">Normal arbejdstid: {fmtNum(normHours)} timer</span>}<div className="types">{DAY_TYPES.map(([type, icon]) => <button className={"type" + (form.day_type === type ? " sel" : "")} onClick={() => patch({
         day_type: type
@@ -106,15 +108,7 @@ export function DayForm({ form, setForm, date, boot, normHours, totals, simple =
               })} /></td><td className="a-del"><button className="ghost x" title="Fjern linje" onClick={() => setForm(prev => ({
                 ...(prev as DayFormState),
                 allocations: (prev as DayFormState).allocations.filter((_l, i) => i !== idx)
-              }))}>✕</button></td></tr>)}</tbody></table><div className="row allocbtns"><button className="ghost" onClick={() => setForm(prev => ({
-          ...(prev as DayFormState),
-          allocations: [...(prev as DayFormState).allocations, {
-            company_id: "",
-            task_type: "",
-            hours: "",
-            task_note: ""
-          }]
-        }))}>➕ Tilføj linje</button>{boot.defaults.length > 0 && <button className="ghost" title="Fordel dagens timer efter din gemte standard" onClick={() => {
+              }))}>✕</button></td></tr>)}</tbody></table><div className="row allocbtns"><button className="ghost" title="Tilføj en ny linje (den forrige linje gemmes automatisk, når den er udfyldt)" onClick={onAddLine}>➕ Tilføj linje</button>{boot.defaults.length > 0 && <button className="ghost" title="Fordel dagens timer efter din gemte standard" onClick={() => {
           const hours = parseNum(form.work_hours) || 0;
           setForm(prev => ({
             ...(prev as DayFormState),
