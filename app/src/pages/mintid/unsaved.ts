@@ -1,3 +1,4 @@
+import { parseNum } from "../../lib/format";
 import type { AllocLine, DayFormState } from "./types";
 
 /** Tom timelinje (fx lige tilføjet med "➕ Tilføj linje") — gemmes ikke, så tæller ikke som ændring. */
@@ -13,3 +14,7 @@ const normalize = (f: DayFormState): string => JSON.stringify({
 /** Er dagsformularen ændret i forhold til det der sidst blev hentet/gemt? */
 export const formChanged = (form: DayFormState | null, saved: DayFormState | null): boolean =>
   !!form && !!saved && normalize(form) !== normalize(saved);
+
+/** Er timelinjen udfyldt nok til at blive gemt (virksomhed/projekt, timer > 0 og opgavetype, hvor den er obligatorisk)? */
+export const lineReady = (l: AllocLine, taskRequired: boolean): boolean =>
+  !!String(l.company_id ?? "") && (parseNum(l.hours) || 0) > 0 && (!taskRequired || !!l.task_type);

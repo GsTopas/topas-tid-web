@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formChanged } from "../pages/mintid/unsaved";
+import { formChanged, lineReady } from "../pages/mintid/unsaved";
 import type { DayFormState } from "../pages/mintid/types";
 
 const base: DayFormState = {
@@ -36,5 +36,22 @@ describe("formChanged (påmindelse om ikke-gemt dag)", () => {
   it("ignorerer en tom tilføjet linje og tal vs. tekst i virksomheds-id", () => {
     expect(formChanged({ ...base, allocations: [...base.allocations, { company_id: "", task_type: "", hours: "", task_note: "" }] }, base)).toBe(false);
     expect(formChanged({ ...base, allocations: [{ ...base.allocations[0], company_id: "3" }] }, base)).toBe(false);
+  });
+});
+
+describe("lineReady (autogem ved \"Tilføj linje\")", () => {
+  const line = { company_id: 3, task_type: "Drift", hours: "2", task_note: "" };
+  it("er sand for en udfyldt linje", () => {
+    expect(lineReady(line, true)).toBe(true);
+    expect(lineReady({ ...line, hours: "1,5", company_id: "3" }, true)).toBe(true);
+  });
+  it("kræver virksomhed/projekt og timer > 0", () => {
+    expect(lineReady({ ...line, company_id: "" }, true)).toBe(false);
+    expect(lineReady({ ...line, hours: "" }, true)).toBe(false);
+    expect(lineReady({ ...line, hours: "0" }, true)).toBe(false);
+  });
+  it("kræver kun opgavetype, når den er obligatorisk", () => {
+    expect(lineReady({ ...line, task_type: "" }, true)).toBe(false);
+    expect(lineReady({ ...line, task_type: "" }, false)).toBe(true);
   });
 });
