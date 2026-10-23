@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formChanged, lineReady } from "../pages/mintid/unsaved";
+import { formChanged, lineReady, typeChangeDropsHours } from "../pages/mintid/unsaved";
 import type { DayFormState } from "../pages/mintid/types";
 
 const base: DayFormState = {
@@ -53,5 +53,25 @@ describe("lineReady (autogem ved \"Tilføj linje\")", () => {
   it("kræver kun opgavetype, når den er obligatorisk", () => {
     expect(lineReady({ ...line, task_type: "" }, true)).toBe(false);
     expect(lineReady({ ...line, task_type: "" }, false)).toBe(true);
+  });
+});
+
+describe("typeChangeDropsHours (Er du sikker? ved skift til fravær)", () => {
+  const noLines = { ...base, allocations: [] };
+  it("spørger ved skift fra arbejdsdag til fravær, når dagen har gemte timer", () => {
+    expect(typeChangeDropsHours("Kontor", "Barn syg", 7.5, noLines)).toBe(true);
+    expect(typeChangeDropsHours("Rejsedag", "Ferie", 7.5, noLines)).toBe(true);
+    expect(typeChangeDropsHours("Andet sted", "Ingen", 7.5, noLines)).toBe(true);
+  });
+  it("spørger, når formularen har udfyldte timelinjer, selv om intet er gemt", () => {
+    expect(typeChangeDropsHours("Kontor", "Egen sygdom", 0, base)).toBe(true);
+  });
+  it("spørger ikke uden timer (fx en forudfyldt normdag)", () => {
+    expect(typeChangeDropsHours("Kontor", "Barn syg", 0, noLines)).toBe(false);
+    expect(typeChangeDropsHours("Kontor", "Barn syg", 0, { ...base, allocations: [{ company_id: "", task_type: "", hours: "", task_note: "" }] })).toBe(false);
+  });
+  it("spørger ikke ved skift mellem arbejdsdage eller fra fravær", () => {
+    expect(typeChangeDropsHours("Kontor", "Andet sted", 7.5, base)).toBe(false);
+    expect(typeChangeDropsHours("Barn syg", "Ferie", 7.5, base)).toBe(false);
   });
 });

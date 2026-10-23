@@ -44,13 +44,13 @@ type Props = {
   onSaveDefaults: () => void;
   /** "➕ Tilføj linje": tilføjer en tom linje og gemmer dagen, hvis den forrige linje er udfyldt. */
   onAddLine: () => void;
+  /** Valg af dagtype (MinTid spørger først, hvis skiftet sletter dagens timer). */
+  onPickType: (type: string) => void;
 };
 
-export function DayForm({ form, setForm, date, boot, normHours, totals, simple = false, patch, updateAlloc, missingTask, partialAbsence, onSaveDefaults, onAddLine }: Props) {
+export function DayForm({ form, setForm, date, boot, normHours, totals, simple = false, patch, updateAlloc, missingTask, partialAbsence, onSaveDefaults, onAddLine, onPickType }: Props) {
   const { isWorkDay, isAbsenceDay, total, allocated, remaining, pct, over, done, taskRequired } = totals;
-  return <section className="dayform"><h2>{WEEKDAYS_LONG[weekdayIdx(date)]} {fmtDate(date)}</h2>{normHours > 0 && <span className="muted">Normal arbejdstid: {fmtNum(normHours)} timer</span>}<div className="types">{DAY_TYPES.map(([type, icon]) => <button className={"type" + (form.day_type === type ? " sel" : "")} onClick={() => patch({
-        day_type: type
-      })} key={type}><span>{icon}</span> {type}</button>)}</div>{LOCATION_NOTE_TYPES.includes(form.day_type) && <input className="wide" placeholder={form.day_type === "Rejsedag" ? "Hvor? (fx Vietnam)" : "Hvor? (fx hjemmefra)"} value={form.location_note} onChange={e => patch({
+  return <section className="dayform"><h2>{WEEKDAYS_LONG[weekdayIdx(date)]} {fmtDate(date)}</h2>{normHours > 0 && <span className="muted">Normal arbejdstid: {fmtNum(normHours)} timer</span>}<div className="types">{DAY_TYPES.map(([type, icon]) => <button className={"type" + (form.day_type === type ? " sel" : "")} onClick={() => onPickType(type)} key={type}><span>{icon}</span> {type}</button>)}</div>{LOCATION_NOTE_TYPES.includes(form.day_type) && <input className="wide" placeholder={form.day_type === "Rejsedag" ? "Hvor? (fx Vietnam)" : "Hvor? (fx hjemmefra)"} value={form.location_note} onChange={e => patch({
       location_note: e.target.value
     })} />}{isAbsenceDay && <div className="row"><label>Fraværstimer<input className="hours" inputMode="decimal" value={form.absence_hours} onChange={e => patch({
           absence_hours: e.target.value
