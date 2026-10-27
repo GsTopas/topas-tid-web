@@ -2,8 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { dayNorm, splitsByEmployee, type NormSplit } from "../lib/norm";
 import { api } from "../lib/api";
 import { addDays, fmtDate, fmtNum } from "../lib/format";
-import { HALF_HOLIDAY, holidayDays } from "../lib/ferie";
+import { holidayDays } from "../lib/ferie";
 import { downloadCsv } from "../lib/csv";
+import { absenceLabel } from "./mintid/constants";
 import { DataTable } from "../components/DataTable";
 import { useMultiPeriod } from "../hooks/usePeriods";
 import { MultiPeriodPicker } from "../components/PeriodPicker";
@@ -120,7 +121,7 @@ export function FravaerLoen() {
           nr: e.payroll_number ?? "",
           afd: e.department || "",
           dato: fmtDate(e.work_date),
-          type: e.absence_type === "Ferie" && e.location ? HALF_HOLIDAY : e.absence_type,
+          type: absenceLabel(e),
           valg: e.absence_choice || "",
           kodeTxt: e.absence_code || "",
           timer: e.absence_hours != null ? fmtNum(fravaerTimer) : "",
