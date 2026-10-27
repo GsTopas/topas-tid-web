@@ -46,9 +46,11 @@ type Props = {
   onAddLine: () => void;
   /** Valg af dagtype (MinTid spørger først, hvis skiftet sletter dagens timer). */
   onPickType: (type: string) => void;
+  /** Navne på alle selskaber/projekter (også inaktive), så en gemt linje vises selv om den ikke er en aktuel valgmulighed. */
+  companyNames: Record<number, string>;
 };
 
-export function DayForm({ form, setForm, date, boot, normHours, totals, simple = false, patch, updateAlloc, missingTask, partialAbsence, onSaveDefaults, onAddLine, onPickType }: Props) {
+export function DayForm({ form, setForm, date, boot, normHours, totals, simple = false, patch, updateAlloc, missingTask, partialAbsence, onSaveDefaults, onAddLine, onPickType, companyNames }: Props) {
   const { isWorkDay, isAbsenceDay, total, allocated, remaining, pct, over, done, taskRequired } = totals;
   return <section className="dayform"><h2>{WEEKDAYS_LONG[weekdayIdx(date)]} {fmtDate(date)}</h2>{normHours > 0 && <span className="muted">Normal arbejdstid: {fmtNum(normHours)} timer</span>}<div className="types">{DAY_TYPES.map(([type, icon]) => <button className={"type" + (form.day_type === type ? " sel" : "")} onClick={() => onPickType(type)} key={type}><span>{icon}</span> {type}</button>)}</div>{LOCATION_NOTE_TYPES.includes(form.day_type) && <input className="wide" placeholder={form.day_type === "Rejsedag" ? "Hvor? (fx Vietnam)" : "Hvor? (fx hjemmefra)"} value={form.location_note} onChange={e => patch({
       location_note: e.target.value
@@ -99,7 +101,7 @@ export function DayForm({ form, setForm, date, boot, normHours, totals, simple =
       note: e.target.value
     })} />{isWorkDay && !simple && <><h3>Timefordeling</h3><table className="alloc"><thead><tr><th>Virksomhed/projekt</th>{boot.task_options.length > 0 && <th>Opgavetype</th>}<th>Timer</th><th>Opgavenote</th><th /></tr></thead><tbody>{form.allocations.map((line, idx) => <tr key={idx}><td className="a-comp" data-label="Virksomhed/projekt"><select value={line.company_id || ""} onChange={e => updateAlloc(idx, {
                 company_id: e.target.value
-              })}><option value="">— vælg —</option>{boot.companies.map(c => <option value={c.id} key={c.id}>{c.name}</option>)}</select></td>{boot.task_options.length > 0 && <td className="a-task" data-label="Opgavetype"><select value={line.task_type} className={missingTask(line) ? "mangler" : ""} onChange={e => updateAlloc(idx, {
+              })}><option value="">— vælg —</option>{boot.companies.map(c => <option value={c.id} key={c.id}>{c.name}</option>)}{line.company_id && !boot.companies.some(c => c.id === Number(line.company_id)) && <option value={line.company_id}>{companyNames[Number(line.company_id)] || "#" + line.company_id} (ikke valgbar)</option>}</select></td>{boot.task_options.length > 0 && <td className="a-task" data-label="Opgavetype"><select value={line.task_type} className={missingTask(line) ? "mangler" : ""} onChange={e => updateAlloc(idx, {
                 task_type: e.target.value
               })}><option value="">{taskRequired ? "— vælg —" : "—"}</option>{boot.task_options.map(o => <option key={o}>{o}</option>)}{line.task_type && !boot.task_options.includes(line.task_type) && <option value={line.task_type}>{line.task_type} (udgået)</option>}</select></td>}<td className="a-hours" data-label="Timer"><input className="hours" inputMode="decimal" value={line.hours} onChange={e => updateAlloc(idx, {
                 hours: e.target.value
