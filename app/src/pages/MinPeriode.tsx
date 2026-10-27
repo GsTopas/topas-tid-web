@@ -66,6 +66,8 @@ export function MinPeriode({ boot }: { boot: Boot }) {
   let date = period.start_date;
   let sumWork = 0;
   let sumAbsence = 0;
+  /** Fravær med kode 51 ("Andet – egen betalt") er ikke betalt; alt andet fravær er. */
+  let sumUnpaid = 0;
   let sumControl = 0;
   let sumAllocated = 0;
   while (date <= period.end_date) {
@@ -83,6 +85,9 @@ export function MinPeriode({ boot }: { boot: Boot }) {
     }
     if (entry?.absence_hours != null) {
       sumAbsence += absence;
+      if (entry.absence_type === "Øvrigt fravær" && entry.absence_code === "51") {
+        sumUnpaid += absence;
+      }
     }
     const note = [entry?.location_note, entry?.note].filter(Boolean).join(" · ");
     const cls: Record<string, string> = weekend ? Object.fromEntries(["dato", "sted", "frav", "fravt", "ind", "ud", "arb", "ford", "ktrl", "note"].map(k => [k, "wknd"])) : {
@@ -149,7 +154,7 @@ export function MinPeriode({ boot }: { boot: Boot }) {
     }]} rows={rows} footer={{
       dato: "I ALT",
       sted: "",
-      frav: "betalt fravær:",
+      frav: "fravær i alt:",
       fravt: fmtNum(sumAbsence),
       ind: "",
       ud: "",
@@ -158,6 +163,28 @@ export function MinPeriode({ boot }: { boot: Boot }) {
       ktrl: (sumControl >= 0 ? "+" : "") + fmtNum(sumControl),
       note: ""
     }} extraFooter={[{
+      dato: "",
+      sted: "",
+      frav: "heraf betalt fravær:",
+      fravt: fmtNum(sumAbsence - sumUnpaid),
+      ind: "",
+      ud: "",
+      arb: "",
+      ford: "",
+      ktrl: "",
+      note: ""
+    }, {
+      dato: "",
+      sted: "",
+      frav: "heraf egen betalt (kode 51):",
+      fravt: fmtNum(sumUnpaid),
+      ind: "",
+      ud: "",
+      arb: "",
+      ford: "",
+      ktrl: "",
+      note: ""
+    }, {
       dato: "ÅTD SALDO",
       sted: "",
       frav: saldo ? <span className="muted small">{`Start saldo ${fmtSigned(saldo.start)} + Kontrol ${fmtSigned(saldo.kontrol)} (${fmtDate(yearStart)} – ${fmtDate(period.end_date)})`}</span> : "",
