@@ -31,6 +31,10 @@ export const absenceCodeFor = (t: string): string | null => OTHER_ABSENCE_CODES[
 export const fromDbAbsenceType = (type: string | null | undefined, code: unknown): string | null | undefined =>
   type === "Øvrigt fravær" ? code === "51" ? "Andet – egen betalt" : "Andet – firmabetalt" : type;
 
+/** Fraværstypen som den vises i lister: "Andet – egen betalt"/"Andet – firmabetalt" i stedet for "Øvrigt fravær", ½ feriedag for ferie på en arbejdsdag. */
+export const absenceLabel = (e: { location?: string | null; absence_type?: string | null; absence_code?: unknown }): string =>
+  e.absence_type === "Ferie" && e.location ? HALF_HOLIDAY : String(fromDbAbsenceType(e.absence_type, e.absence_code) ?? "");
+
 /** Fraværstype på en arbejdsdag → valget i "Fravær/ferie samme dag?" (Ferie = ½ feriedag). */
 export const fromDbPartialAbsence = (type: string | null | undefined, code: unknown): string =>
   type === "Ferie" ? HALF_HOLIDAY : String(fromDbAbsenceType(type, code) ?? "");

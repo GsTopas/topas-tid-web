@@ -134,6 +134,8 @@ export interface MyPeriodEntry {
   absence_type: string | null;
   absence_note: string | null;
   absence_hours: number | null;
+  absence_code: string | null;
+  absence_choice: string | null;
   time_in: string | null;
   time_out: string | null;
   work_hours: number | null;
@@ -772,7 +774,7 @@ export const api = {
         supabase
           .from("day_entries")
           .select(
-            "work_date, location, location_note, absence_type, absence_note, absence_hours, time_in, time_out, work_hours, note",
+            "work_date, location, location_note, absence_type, absence_note, absence_hours, absence_code, absence_choice, time_in, time_out, work_hours, note",
           )
           .eq("employee_id", empId)
           .gte("work_date", from)

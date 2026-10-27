@@ -1,9 +1,9 @@
 import { Fragment, useEffect, useState } from "react";
 import { api, type Boot } from "../lib/api";
 import { fmtDate, fmtNum, weekdayIdx } from "../lib/format";
-import { HALF_HOLIDAY } from "../lib/ferie";
 import { dayNorm, type NormSplit } from "../lib/norm";
 import { isSimpleDepartment } from "../lib/departments";
+import { absenceLabel } from "./mintid/constants";
 
 const fmtSigned = (n: number) => (n >= 0 ? "+" : "") + fmtNum(n);
 import { DataTable, type Row } from "../components/DataTable";
@@ -84,7 +84,7 @@ export function MinPeriode({ boot }: { boot: Boot }) {
     if (entry?.absence_hours != null) {
       sumAbsence += absence;
     }
-    const note = [entry?.location_note, entry?.absence_note, entry?.note].filter(Boolean).join(" · ");
+    const note = [entry?.location_note, entry?.note].filter(Boolean).join(" · ");
     const cls: Record<string, string> = weekend ? Object.fromEntries(["dato", "sted", "frav", "fravt", "ind", "ud", "arb", "ford", "ktrl", "note"].map(k => [k, "wknd"])) : {
       frav: "gul",
       fravt: "gul",
@@ -97,7 +97,8 @@ export function MinPeriode({ boot }: { boot: Boot }) {
     rows.push({
       dato: `${WEEKDAYS[weekdayIdx(date)]} ${date.slice(8, 10)}.${date.slice(5, 7)}`,
       sted: entry?.location || "",
-      frav: entry?.absence_type === "Ferie" && entry.location ? HALF_HOLIDAY : entry?.absence_type || "",
+      // Den konkrete fraværstype + valg og fritekst, fx "Andet – egen betalt · skuespilsjob".
+      frav: entry?.absence_type ? [absenceLabel(entry), entry.absence_choice, entry.absence_note].filter(Boolean).join(" · ") : "",
       fravt: entry?.absence_hours != null ? fmtNum(absence) : "",
       ind: entry?.time_in?.slice(0, 5) || "",
       ud: entry?.time_out?.slice(0, 5) || "",
