@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { api, type Boot, type NormDay, type Period } from "../../lib/api";
+import { api, type Boot, type FormOptions, type NormDay, type Period } from "../../lib/api";
 import { addDays, fmtNum, weekdayIdx } from "../../lib/format";
 import { dayNorm, type NormSplit } from "../../lib/norm";
 import { fromDbAbsenceType, fromDbPartialAbsence } from "./constants";
@@ -37,6 +37,26 @@ export function useMinTid(boot: Boot | null) {
   const period = chosenPeriod || boot?.period;
   /** Den medarbejder der registreres for. */
   const empId = proxyEmp?.id || boot?.employee.id;
+
+  /** Timefordelingens valgmuligheder for empId (ved "Registrerer for" personens egne, ikke lederens); null indtil hentet. */
+  const [formOpts, setFormOpts] = useState<{ empId: number; opts: FormOptions } | null>(null);
+  const empDepartment = proxyEmp ? proxyEmp.department : boot?.employee.department;
+  useEffect(() => {
+    if (!empId) {
+      return;
+    }
+    let current = true;
+    api.formOptions(empId, empDepartment || null)
+      .then(opts => current && setFormOpts({ empId, opts }))
+      .catch(() => {});
+    return () => {
+      current = false;
+    };
+  }, [empId, empDepartment]);
+  /** Valgmuligheder til dagsformularen: personens egne når de er hentet, ellers (kun for en selv) boot's. */
+  const options: FormOptions | null = formOpts && formOpts.empId === empId
+    ? formOpts.opts
+    : boot && !proxyEmp ? { companies: boot.companies, task_options: boot.task_options, names: {} } : null;
 
   /** Normugen (mødt/gået/frokost pr. ugedag) og dens dagsfordelinger for empId; null indtil de er hentet. */
   const [normWeek, setNormWeek] = useState<{ empId: number; days: NormDay[]; splits: NormSplit[] } | null>(null);
@@ -259,6 +279,8 @@ export function useMinTid(boot: Boot | null) {
     beforeHired,
     reloadDays,
     empId,
+    empDepartment,
+    options,
     normDays,
     normSplits,
     setNormWeek

@@ -23,6 +23,8 @@ type Props = {
   flash: (msg: string) => void;
 };
 
+const MISSING_COMPANY_MSG = "❌ Vælg virksomhed/projekt på alle timelinjer med timer";
+
 /** Fanen "⏱️ Min tid": periodelinje, kalender, dagsformular, flere dage på én gang og gem-bjælke — og underfanen "Konfigurer normuge". */
 export function MinTid({ mt, period, boot, setBoot, emp, periods, flash }: Props) {
   const [view, setView] = useState<"dage" | "normuge">("dage");
@@ -39,8 +41,12 @@ export function MinTid({ mt, period, boot, setBoot, emp, periods, flash }: Props
   const pct = total > 0 ? Math.min(allocated / total * 100, 100) : 0;
   const over = total > 0 && allocated - total > 0.01;
   const done = total > 0 && Math.abs(remaining) <= 0.01;
-  const taskRequired = !simple && boot.task_options.length > 0 && emp.department !== "Hotel & Administration";
+  /** Dagsformularen viser valgmulighederne for den, der registreres for (ikke lederens egne). */
+  const formBoot: Boot | null = mt.options ? { ...boot, companies: mt.options.companies, task_options: mt.options.task_options } : null;
+  const taskRequired = !simple && !!formBoot && formBoot.task_options.length > 0 && mt.empDepartment !== "Hotel & Administration";
   const missingTask = (line: AllocLine): boolean => !!(taskRequired && line.company_id && (parseNum(line.hours) || 0) > 0 && !line.task_type);
+  /** En linje med timer men uden virksomhed/projekt ville ellers blive droppet stille ved gem (timerne forsvinder). */
+  const missingCompany = (line: AllocLine): boolean => !line.company_id && (parseNum(line.hours) || 0) > 0;
   const isOff = (d: string) => normFor(d) <= 0 || beforeHired(d);
 
   const patch = (p: Partial<DayFormState>) => setForm(prev => ({
@@ -98,6 +104,9 @@ export function MinTid({ mt, period, boot, setBoot, emp, periods, flash }: Props
     if (isWorkDay && (form as DayFormState).allocations.some(missingTask)) {
       return flash("❌ Vælg opgavetype på alle timelinjer — opgavetype er obligatorisk");
     }
+    if (isWorkDay && !simple && (form as DayFormState).allocations.some(missingCompany)) {
+      return flash(MISSING_COMPANY_MSG);
+    }
     setSaving(true);
     try {
       let count = 0;
@@ -150,6 +159,10 @@ export function MinTid({ mt, period, boot, setBoot, emp, periods, flash }: Props
   const persistDay = async (auto = false) => {
     if (isWorkDay && (form as DayFormState).allocations.some(missingTask)) {
       flash("❌ Vælg opgavetype på alle timelinjer — opgavetype er obligatorisk");
+      return null;
+    }
+    if (isWorkDay && !simple && (form as DayFormState).allocations.some(missingCompany)) {
+      flash(MISSING_COMPANY_MSG);
       return null;
     }
     setSaving(true);
@@ -284,7 +297,7 @@ export function MinTid({ mt, period, boot, setBoot, emp, periods, flash }: Props
         setBulkTo("");
       })} /> : <span className="muted">{period.month_name} {period.year} · {fmtDate(period.start_date)} – {fmtDate(period.end_date)}</span>}{proxySelect}{period.locked && <span className="warn">🔒 Låst af økonomi — kan ses, men ikke rettes</span>}{!period.locked && economyApproved && <span className="warn">🔒 {proxyEmp ? proxyEmp.name + " er" : "Du er"} godkendt af økonomi for denne periode — kan ikke rettes</span>}{!period.locked && !economyApproved && leaderApproval && <span className={leaderLocked ? "warn" : "muted small"} title={approvedByText("Godkendt", leaderApproval.name, leaderApproval.at)}>{leaderLocked ? "🔒 Din leder har godkendt perioden — kan ses, men ikke rettes. Kontakt din leder, hvis noget skal ændres" : "✓ Leder-godkendt — medarbejderen kan ikke længere rette, men du kan"}</span>}</div>
     <PeriodCalendar weeks={mt.weeks} selectedDate={mt.selectedDate} today={boot.today} isOff={isOff} icon={d => dayStatusIcon(d, dayStatus, isOff(d), boot.today, simple)} onSelect={d => d !== mt.selectedDate && guard(() => mt.setSelectedDate(d))} />
-    {form && <DayForm form={form} setForm={setForm} date={selectedDate} boot={boot} normHours={normFor(selectedDate)} totals={totals} simple={simple} patch={patch} updateAlloc={updateAlloc} missingTask={missingTask} partialAbsence={partialAbsence} onSaveDefaults={saveDefaults} onAddLine={addLine} onPickType={pickType} />}
+    {form && formBoot && <DayForm form={form} setForm={setForm} date={selectedDate} boot={formBoot} companyNames={mt.options?.names || {}} normHours={normFor(selectedDate)} totals={totals} simple={simple} patch={patch} updateAlloc={updateAlloc} missingTask={missingTask} partialAbsence={partialAbsence} onSaveDefaults={saveDefaults} onAddLine={addLine} onPickType={pickType} />}
     {form && <details className="bulk"><summary>🗓️ Registrér flere dage på én gang</summary><p className="muted small">Udfyld dagen ovenfor (fx Ferie eller Kontor{simple ? "" : " med fordeling"}), vælg et interval — samme indhold gemmes på alle hverdage i intervallet.</p><div className="row"><label>Fra<input type="date" value={bulkFrom || selectedDate} min={period.start_date} max={period.end_date} onChange={e => setBulkFrom(e.target.value)} /></label><label>Til<input type="date" value={bulkTo || selectedDate} min={period.start_date} max={period.end_date} onChange={e => setBulkTo(e.target.value)} /></label><button className="primary" disabled={saving || locked} onClick={saveRange}>{locked ? "🔒 Låst" : saving ? "Gemmer…" : "💾 Gem dagene"}</button></div></details>}
     {form && <div className="savebar"><span className="muted">{WEEKDAYS_LONG[weekdayIdx(selectedDate)]} {fmtDate(selectedDate)}{isWorkDay && (simple ? ` · ${fmtNum(total)} t` : ` · ${fmtNum(allocated)} / ${fmtNum(total)} t fordelt`)}</span><button className="primary" disabled={saving || locked} onClick={saveDay}>{locked ? "🔒 Perioden er låst" : saving ? "Gemmer…" : "💾 Gem dagen"}</button></div>}
     {pendingType && form && <div className="modal-backdrop" onClick={cancelType} onKeyDown={e => e.key === "Escape" && cancelType()}><div className="modal" role="dialog" aria-modal="true" aria-labelledby="overskriv-titel" onClick={e => e.stopPropagation()}><h3 id="overskriv-titel">Er du sikker på, at du vil overskrive dagen?</h3><p className="muted">{WEEKDAYS_LONG[weekdayIdx(selectedDate)]} {fmtDate(selectedDate)} har registrerede timer{total > 0 ? ` (${fmtNum(total)} t)` : ""}. Skifter du til <b>{pendingType}</b>, bliver mødt/gået{simple ? "" : " og timefordelingen"} på dagen slettet, når du gemmer dagen.</p><div className="modal-actions"><button className="ghost" autoFocus onClick={cancelType}>Fortryd</button><button className="primary" onClick={confirmType}>Ja, skift til {pendingType}</button></div></div></div>}

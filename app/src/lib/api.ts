@@ -69,6 +69,12 @@ export interface Boot {
   employee: SessionEmployee;
 }
 
+export interface FormOptions {
+  companies: CompanyBasic[];
+  task_options: string[];
+  names: Record<number, string>;
+}
+
 export interface DayEntrySummary {
   work_date: string;
   location: string | null;
@@ -626,6 +632,32 @@ export const api = {
       today,
       weekly_norm: me.weekly_norm,
       employee: me,
+    };
+  },
+
+  /** Valgmuligheder i Timefordeling for den, der registreres for (ved "Registrerer for": personens
+   *  egne selskaber/projekter og afdelingens opgavetyper, ikke lederens). `names` har alle
+   *  selskaber/projekter, også inaktive, så en gemt linje altid kan vises med sit navn. */
+  async formOptions(employeeId: number, department: string | null): Promise<FormOptions> {
+    const [all, access, taskTypes] = await Promise.all([
+      q<CompanyBasic & { active: boolean }>(supabase.from("companies").select("id, name, active").order("sort").order("name")),
+      q<AccessRow>(supabase.from("employee_companies").select("company_id").eq("employee_id", employeeId)),
+      q<{ name: string }>(
+        supabase
+          .from("task_types")
+          .select("name")
+          .eq("active", true)
+          .eq("department", department || "")
+          .order("sort")
+          .order("name"),
+      ),
+    ]);
+    const allowed = new Set(access.map((a) => a.company_id));
+    const active = all.filter((c) => c.active).map(({ id, name }) => ({ id, name }));
+    return {
+      companies: allowed.size ? active.filter((c) => allowed.has(c.id)) : active,
+      task_options: taskTypes.map((tt) => tt.name),
+      names: Object.fromEntries(all.map((c) => [c.id, c.name])),
     };
   },
 
