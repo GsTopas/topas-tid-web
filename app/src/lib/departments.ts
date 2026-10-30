@@ -1,5 +1,5 @@
 /** Afdelingerne (hard-codet liste; `employees.department` er tekst). */
-export const DEPARTMENTS = ["Marketing", "Økonomi", "Digital Transformation", "IT", "Hotel & Administration", "Topas Travel"];
+export const DEPARTMENTS = ["Marketing", "Økonomi", "Digital Transformation", "IT", "Hotel & Administration", "Topas Travel", "Disko Line Administration"];
 
 /**
  * Afdelinger med enkel visning: de registrerer kun dagen (mødt/gået/frokost), fravær og ferie
