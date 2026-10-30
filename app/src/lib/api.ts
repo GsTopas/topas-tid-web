@@ -736,7 +736,16 @@ export const api = {
     }
     if (input.day_type === "Ingen") {
       await q(supabase.from("allocations").delete().eq("employee_id", target.id).eq("work_date", date).select("id"));
-      await q(supabase.from("day_entries").delete().eq("employee_id", target.id).eq("work_date", date).select("id"));
+      const gone = await q(
+        supabase.from("day_entries").delete().eq("employee_id", target.id).eq("work_date", date).select("id"),
+      );
+      // RLS afviser en sletning i en låst/godkendt periode ved stille at slette 0 rækker; sig det i stedet for "slettet".
+      if (!gone.length) {
+        const still = await q(supabase.from("day_entries").select("id").eq("employee_id", target.id).eq("work_date", date));
+        if (still.length) {
+          throw new Error("Perioden er låst eller godkendt — dagen kan ikke slettes");
+        }
+      }
       await q(
         supabase.from("form_drafts").delete().eq("employee_id", target.id).eq("work_date", date).select("employee_id"),
       );
