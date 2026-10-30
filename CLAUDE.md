@@ -61,6 +61,7 @@ Commands (run in `app/`): `npm ci`, `npm run dev`, `npm run typecheck`, `npm tes
 | `is_manager` | Leader of **their own department**: reads the department's registrations, registers on behalf of them, leader-approves them, edits companies/projects plus own-department task types and hour pools |
 | Økonomi + `is_manager`, or `is_admin` | "can_economy": all departments, Fakturering, Fravær & løn, payroll lock. *Why:* since 28 Sep, merely being *in* Økonomi no longer grants full insight |
 | `is_admin` | Employees, logins, billing rules, project access. Admin does **not** override the leader approval (removed 25 Aug: only the department's own leader approves) |
+| `approves_all_departments` | "Godkender alle" in Settings → Medarbejdere (since 30 Oct 2026: Malene and Lone): may leader-approve employees in **every** department (`me_approves_all_departments()` in `set_leader_approval`). The only exception to the own-leader rule |
 
 Departments are a hard-coded list in `app/src/lib/departments.ts`: Marketing, Økonomi, Digital Transformation, IT, Hotel & Administration, Topas Travel, Disko Line Administration.
 

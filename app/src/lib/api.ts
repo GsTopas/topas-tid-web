@@ -20,6 +20,8 @@ export interface EmployeeSelfRow {
   weekly_norm: WeeklyNorm;
   is_admin: boolean;
   is_manager: boolean;
+  /** Kan leder-godkende medarbejdere i alle afdelinger. */
+  approves_all_departments: boolean;
   hired_date: string | null;
 }
 
@@ -365,6 +367,8 @@ export interface EmployeeAdminRow {
   employer_company_id: number | null;
   is_admin: boolean;
   is_manager: boolean;
+  /** Kan leder-godkende medarbejdere i alle afdelinger. */
+  approves_all_departments: boolean;
   active: boolean;
   hourly_rate: number | null;
   hired_date: string | null;
@@ -519,7 +523,7 @@ export async function currentEmployee(): Promise<SessionEmployee | null> {
   const rows = await q<EmployeeSelfRow>(
     supabase
       .from("employees")
-      .select("id, name, department, weekly_norm, is_admin, is_manager, hired_date")
+      .select("id, name, department, weekly_norm, is_admin, is_manager, approves_all_departments, hired_date")
       .eq("auth_user_id", user.id)
       .eq("active", true),
   );
@@ -1288,7 +1292,7 @@ export const api = {
       supabase
         .from("employees")
         .select(
-          "id, name, email, department, employer_company_id, is_admin, is_manager, active, hourly_rate, hired_date, payroll_number, weekly_norm, flex_start, auth_user_id",
+          "id, name, email, department, employer_company_id, is_admin, is_manager, approves_all_departments, active, hourly_rate, hired_date, payroll_number, weekly_norm, flex_start, auth_user_id",
         )
         .order("name"),
     ),
