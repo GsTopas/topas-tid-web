@@ -25,6 +25,7 @@ type EditedFields =
   | "flex_start"
   | "is_admin"
   | "is_manager"
+  | "approves_all_departments"
   | "active";
 
 /** En medarbejder-række mens den redigeres: talfelter kan midlertidigt være tekst fra input-felterne. */
@@ -39,6 +40,7 @@ type EmployeeRow = Omit<Employee, EditedFields> & {
   flex_start: number | string | null;
   is_admin: boolean;
   is_manager: boolean;
+  approves_all_departments: boolean;
   active: boolean;
   /** Redigeret Norm/uge-tekst (kun sat når brugeren har rørt feltet). */
   norm_uge?: string;
@@ -116,6 +118,7 @@ export function Medarbejdere({ flash }: { flash: (msg: string) => void }) {
         employer_company_id: p.employer_company_id ?? null,
         is_admin: p.is_admin,
         is_manager: p.is_manager,
+        approves_all_departments: p.approves_all_departments,
         active: p.active,
         hourly_rate: isSimpleDepartment(p.department) ? 0 : parseNum(String(p.hourly_rate)) ?? 0,
         hired_date: p.hired_date || null,
@@ -145,7 +148,7 @@ export function Medarbejdere({ flash }: { flash: (msg: string) => void }) {
       flash("❌ " + (w as Error).message);
     }
   };
-  return <div>{pwInfo && <p className="ok pwinfo">🔑 {pwInfo} — skriv det ned, det vises kun her!</p>}<div className="row"><label>Ansat i <select value={employerFilter} onChange={g => setEmployerFilter(g.target.value)}><option value="">Alle selskaber</option><option value="none">Ikke angivet</option>{companies.filter(c => c.kind === "selskab").map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label><label>Sortér efter <select value={sortKey} onChange={g => setSortKey(g.target.value as SortKey)}><option value="name">Navn</option><option value="employer">Ansat i</option><option value="department">Afdeling</option></select></label><span className="muted small" style={{ alignSelf: "flex-end", paddingBottom: 10 }}>{shown.length} af {rows.length} medarbejdere</span></div><div className="tablewrap"><table className="datatable admin"><thead><tr><th>Navn</th><th>Mail</th><th>Afdeling</th><th title="Selskabet medarbejderen er ansat i">Ansat i</th><th className="num">Timepris</th><th>Startdato</th><th className="num">Lønnr.</th><th className="num" title="Flex-saldo ved start (timer, kan være negativ)">Start saldo</th><th className="num" title="Normtid pr. uge — sæt ned ved deltid. Fordeles automatisk man–fre">Norm/uge</th><th>Admin</th><th>Leder</th><th>Aktiv</th><th>Login</th></tr></thead><tbody>{shown.map(p => <tr className={p.active ? "" : "inaktiv"} key={p.id}><td><input value={p.name} onChange={g => patch(p.id, {
+  return <div>{pwInfo && <p className="ok pwinfo">🔑 {pwInfo} — skriv det ned, det vises kun her!</p>}<div className="row"><label>Ansat i <select value={employerFilter} onChange={g => setEmployerFilter(g.target.value)}><option value="">Alle selskaber</option><option value="none">Ikke angivet</option>{companies.filter(c => c.kind === "selskab").map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label><label>Sortér efter <select value={sortKey} onChange={g => setSortKey(g.target.value as SortKey)}><option value="name">Navn</option><option value="employer">Ansat i</option><option value="department">Afdeling</option></select></label><span className="muted small" style={{ alignSelf: "flex-end", paddingBottom: 10 }}>{shown.length} af {rows.length} medarbejdere</span></div><div className="tablewrap"><table className="datatable admin"><thead><tr><th>Navn</th><th>Mail</th><th>Afdeling</th><th title="Selskabet medarbejderen er ansat i">Ansat i</th><th className="num">Timepris</th><th>Startdato</th><th className="num">Lønnr.</th><th className="num" title="Flex-saldo ved start (timer, kan være negativ)">Start saldo</th><th className="num" title="Normtid pr. uge — sæt ned ved deltid. Fordeles automatisk man–fre">Norm/uge</th><th>Admin</th><th>Leder</th><th title="Kan leder-godkende medarbejdere i alle afdelinger">Godkender alle</th><th>Aktiv</th><th>Login</th></tr></thead><tbody>{shown.map(p => <tr className={p.active ? "" : "inaktiv"} key={p.id}><td><input value={p.name} onChange={g => patch(p.id, {
                 name: g.target.value
               })} /></td><td><input value={p.email || ""} onChange={g => patch(p.id, {
                 email: g.target.value
@@ -167,6 +170,8 @@ export function Medarbejdere({ flash }: { flash: (msg: string) => void }) {
                 is_admin: g.target.checked
               })} /></td><td><input type="checkbox" checked={p.is_manager} onChange={g => patch(p.id, {
                 is_manager: g.target.checked
+              })} /></td><td><input type="checkbox" title="Kan leder-godkende medarbejdere i alle afdelinger" checked={!!p.approves_all_departments} onChange={g => patch(p.id, {
+                approves_all_departments: g.target.checked
               })} /></td><td><input type="checkbox" checked={p.active} onChange={g => patch(p.id, {
                 active: g.target.checked
               })} /></td><td>{p.auth_user_id ? <button className="ghost" onClick={() => manageLogin(p, "reset")}>Nulstil pw</button> : p.email ? <button className="ghost" onClick={() => manageLogin(p, "create")}>Opret login</button> : <span className="muted">mangler mail</span>}</td></tr>)}</tbody></table></div><SaveAllBar count={edits.dirty.size} saving={saving} onSave={saveAll} onUndo={undo} />{draft ? <div className="nyrow"><input placeholder="Navn" value={draft.name} onChange={p => setDraft({

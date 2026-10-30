@@ -59,13 +59,13 @@ export function AfdelingsOverblik({ emp, flash }: { emp: SessionEmployee | null;
     }
   };
   useEffect(loadApprovals, [period?.id]);
-  // Leder-godkendelse: kun leder i medarbejderens egen afdeling
-  const canLeaderApprove = (x: MatrixEmployee) => emp != null && !!emp.is_manager && x.department === emp?.department;
+  // Leder-godkendelse: leder i medarbejderens egen afdeling, eller en med "Godkender alle afdelinger"
+  const canLeaderApprove = (x: MatrixEmployee) => emp != null && (!!emp.approves_all_departments || !!emp.is_manager && x.department === emp.department);
   // Økonomi-godkendelse: admin eller leder i Økonomi
   const canEconomyApprove = emp != null && !!emp.is_admin || emp?.department === "Økonomi" && emp != null && !!emp.is_manager;
   // Hover på fluebenene: hvem/hvornår (titlen sidder på cellen, så den også vises over en deaktiveret boks)
   const leaderTitle = (x: MatrixEmployee, a: Approval | undefined) => {
-    const hint = canLeaderApprove(x) ? a != null && a.economy_approved ? "Økonomi har låst — lås op dér først" : a != null && a.leader_approved ? "Fjern fluebenet for at åbne perioden for medarbejderen igen" : "Leder-godkend medarbejderens timer for perioden (låser perioden for medarbejderen)" : "Kun lederen i medarbejderens egen afdeling";
+    const hint = canLeaderApprove(x) ? a != null && a.economy_approved ? "Økonomi har låst — lås op dér først" : a != null && a.leader_approved ? "Fjern fluebenet for at åbne perioden for medarbejderen igen" : "Leder-godkend medarbejderens timer for perioden (låser perioden for medarbejderen)" : "Kun lederen i medarbejderens egen afdeling (eller en med Godkender alle afdelinger)";
     return a != null && a.leader_approved ? approvedByText("Godkendt", a.leader_by_name, a.leader_at) + "\n" + hint : hint;
   };
   const economyTitle = (a: Approval | undefined) => {
