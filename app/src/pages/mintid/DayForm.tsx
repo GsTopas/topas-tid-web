@@ -48,11 +48,13 @@ type Props = {
   onPickType: (type: string) => void;
   /** Navne på alle selskaber/projekter (også inaktive), så en gemt linje vises selv om den ikke er en aktuel valgmulighed. */
   companyNames: Record<number, string>;
+  /** Perioden er låst (økonomi-lås, lønkørt eller leder-godkendt for medarbejderen): dagen kan ses, men ikke rettes. */
+  locked?: boolean;
 };
 
-export function DayForm({ form, setForm, date, boot, normHours, totals, simple = false, patch, updateAlloc, missingTask, partialAbsence, onSaveDefaults, onAddLine, onPickType, companyNames }: Props) {
+export function DayForm({ form, setForm, date, boot, normHours, totals, simple = false, patch, updateAlloc, missingTask, partialAbsence, onSaveDefaults, onAddLine, onPickType, companyNames, locked = false }: Props) {
   const { isWorkDay, isAbsenceDay, total, allocated, remaining, pct, over, done, taskRequired } = totals;
-  return <section className="dayform"><h2>{WEEKDAYS_LONG[weekdayIdx(date)]} {fmtDate(date)}</h2>{normHours > 0 && <span className="muted">Normal arbejdstid: {fmtNum(normHours)} timer</span>}<div className="types">{DAY_TYPES.map(([type, icon]) => <button className={"type" + (form.day_type === type ? " sel" : "")} onClick={() => onPickType(type)} key={type}><span>{icon}</span> {type}</button>)}</div>{LOCATION_NOTE_TYPES.includes(form.day_type) && <input className="wide" placeholder={form.day_type === "Rejsedag" ? "Hvor? (fx Vietnam)" : "Hvor? (fx hjemmefra)"} value={form.location_note} onChange={e => patch({
+  return <section className="dayform"><h2>{WEEKDAYS_LONG[weekdayIdx(date)]} {fmtDate(date)}</h2>{normHours > 0 && <span className="muted">Normal arbejdstid: {fmtNum(normHours)} timer</span>}<fieldset className="lockable" disabled={locked}><div className="types">{DAY_TYPES.map(([type, icon]) => <button className={"type" + (form.day_type === type ? " sel" : "")} onClick={() => onPickType(type)} key={type}><span>{icon}</span> {type}</button>)}</div>{LOCATION_NOTE_TYPES.includes(form.day_type) && <input className="wide" placeholder={form.day_type === "Rejsedag" ? "Hvor? (fx Vietnam)" : "Hvor? (fx hjemmefra)"} value={form.location_note} onChange={e => patch({
       location_note: e.target.value
     })} />}{isAbsenceDay && <div className="row"><label>Fraværstimer<input className="hours" inputMode="decimal" value={form.absence_hours} onChange={e => patch({
           absence_hours: e.target.value
@@ -107,10 +109,10 @@ export function DayForm({ form, setForm, date, boot, normHours, totals, simple =
                 hours: e.target.value
               })} /></td><td className="a-note" data-label="Opgavenote"><input value={line.task_note} onChange={e => updateAlloc(idx, {
                 task_note: e.target.value
-              })} /></td><td className="a-del"><button className="ghost x" title="Fjern linje" onClick={() => setForm(prev => ({
+              })} /></td><td className="a-del">{!locked && <button className="ghost x" title="Fjern linje" onClick={() => setForm(prev => ({
                 ...(prev as DayFormState),
                 allocations: (prev as DayFormState).allocations.filter((_l, i) => i !== idx)
-              }))}>✕</button></td></tr>)}</tbody></table><div className="row allocbtns"><button className="ghost" title="Tilføj en ny linje (den forrige linje gemmes automatisk, når den er udfyldt)" onClick={onAddLine}>➕ Tilføj linje</button>{boot.defaults.length > 0 && <button className="ghost" title="Fordel dagens timer efter din gemte standard" onClick={() => {
+              }))}>✕</button>}</td></tr>)}</tbody></table>{!locked && <div className="row allocbtns"><button className="ghost" title="Tilføj en ny linje (den forrige linje gemmes automatisk, når den er udfyldt)" onClick={onAddLine}>➕ Tilføj linje</button>{boot.defaults.length > 0 && <button className="ghost" title="Fordel dagens timer efter din gemte standard" onClick={() => {
           const hours = parseNum(form.work_hours) || 0;
           setForm(prev => ({
             ...(prev as DayFormState),
@@ -121,8 +123,8 @@ export function DayForm({ form, setForm, date, boot, normHours, totals, simple =
               task_note: ""
             }))
           }));
-        }}>⭐ Brug standardfordeling</button>}<button className="ghost" title="Gem denne fordeling som din standard" onClick={onSaveDefaults}>💾 Gem som standard</button></div><div className="progresswrap"><div className="progressbar"><div style={{
+        }}>⭐ Brug standardfordeling</button>}<button className="ghost" title="Gem denne fordeling som din standard" onClick={onSaveDefaults}>💾 Gem som standard</button></div>}<div className="progresswrap"><div className="progressbar"><div style={{
             width: `${pct}%`,
             background: over ? "#ff7b73" : done ? "var(--ok)" : "var(--ice)"
-          }} /></div><div className={"progresstext " + (done ? "ok" : over ? "error" : remaining > 0 ? "warn" : "muted")}>{done && `✅ Alle ${fmtNum(total)} timer er fordelt`}{!done && remaining > 0 && `${fmtNum(allocated)} af ${fmtNum(total)} timer fordelt — ${fmtNum(remaining)} tilbage`}{over && `❌ Fordelt ${fmtNum(allocated)} — mere end dagens ${fmtNum(total)} t`}</div></div></>}</section>;
+          }} /></div><div className={"progresstext " + (done ? "ok" : over ? "error" : remaining > 0 ? "warn" : "muted")}>{done && `✅ Alle ${fmtNum(total)} timer er fordelt`}{!done && remaining > 0 && `${fmtNum(allocated)} af ${fmtNum(total)} timer fordelt — ${fmtNum(remaining)} tilbage`}{over && `❌ Fordelt ${fmtNum(allocated)} — mere end dagens ${fmtNum(total)} t`}</div></div></>}</fieldset></section>;
 }

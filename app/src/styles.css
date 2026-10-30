@@ -1028,6 +1028,19 @@ details.mpick[open] summary {
   font-weight: 600
 }
 
+/* Låst periode: hele dagformularen er skrivebeskyttet (fieldset disabled). */
+.dayform fieldset.lockable {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0
+}
+
+.dayform fieldset.lockable:disabled select,
+.dayform fieldset.lockable:disabled button {
+  cursor: not-allowed
+}
+
 details.mpick {
   position: relative
 }
