@@ -101,9 +101,9 @@ export function DayForm({ form, setForm, date, boot, normHours, totals, simple =
       const sum = (parseNum(form.work_hours) || 0) + (parseNum(form.absence_hours) || 0);
       const diff = Math.round((sum - normHours) * 100) / 100;
       return <p className={"small " + (Math.abs(diff) > 0.01 ? "warn" : "muted")}>Arbejde + fravær = {fmtNum(sum)} t{Math.abs(diff) > 0.01 ? ` — afvigelse ${diff > 0 ? "+" : ""}${fmtNum(diff)} t fra normal tid` : " (= normal tid)"}</p>;
-    })()}{oncall && <div className="row oncall"><label>📞 Vagttelefon (timer)<input className="hours" inputMode="decimal" placeholder="0" value={form.oncall_hours} title="Timer på vagttelefonen denne dag — lægges oveni normtiden" onChange={e => patch({
+    })()}{oncall && <div className="row oncall"><label>📞 Vagttelefon (timer)<input className="hours" inputMode="decimal" placeholder="0" value={form.oncall_hours} title="Timer på vagttelefonen denne dag" onChange={e => patch({
           oncall_hours: e.target.value
-        })} /></label><span className="muted small">Lægges oveni normtiden{form.day_type === "Ingen" ? " — kan også bruges på en dag uden arbejde" : ""}</span></div>}<input className="wide" placeholder="Note om dagen (fx været til kursus, fysio …)" value={form.note} onChange={e => patch({
+        })} /></label><span className="muted small">Vises for sig selv og tæller ikke med i arbejdstid eller saldo</span></div>}<input className="wide" placeholder="Note om dagen (fx været til kursus, fysio …)" value={form.note} onChange={e => patch({
       note: e.target.value
     })} />{isWorkDay && !simple && <><h3>Timefordeling</h3><table className="alloc"><thead><tr><th>Virksomhed/projekt</th>{boot.task_options.length > 0 && <th>Opgavetype</th>}<th>Timer</th><th>Opgavenote</th><th /></tr></thead><tbody>{form.allocations.map((line, idx) => <tr key={idx}><td className="a-comp" data-label="Virksomhed/projekt"><select value={line.company_id || ""} onChange={e => updateAlloc(idx, {
                 company_id: e.target.value

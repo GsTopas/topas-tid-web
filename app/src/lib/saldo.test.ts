@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { kontrolSum } from "./saldo";
+import { kontrolSum, oncallHours } from "./saldo";
 
 const norm = { 0: 7.5, 1: 7.5, 2: 7.5, 3: 7.5, 4: 7, 5: 0, 6: 0 };
 
@@ -19,12 +19,11 @@ describe("kontrolSum", () => {
   });
 });
 
-describe("kontrolSum med vagttelefon", () => {
-  it("lægger vagttelefon-timer oveni, også på en dag uden arbejde", () => {
-    expect(kontrolSum([
-      { work_date: "2026-10-05", location: "Kontor", work_hours: 7.5, absence_hours: null, oncall_hours: 2 }, // man: 0 + 2
-      { work_date: "2026-11-01", location: null, work_hours: null, absence_hours: null, oncall_hours: "1.5" }, // søn, "Ingen": +1,5
-      { work_date: "2026-10-06", location: null, work_hours: null, absence_hours: 7.5, oncall_hours: null }, // hel fraværsdag: 0
-    ], norm)).toBe(3.5);
+describe("oncallHours", () => {
+  it("læser vagttelefon-timer (tal eller tekst), 0 når der ingen er", () => {
+    expect(oncallHours({ oncall_hours: 2 })).toBe(2);
+    expect(oncallHours({ oncall_hours: "1.5" })).toBe(1.5);
+    expect(oncallHours({ oncall_hours: null })).toBe(0);
+    expect(oncallHours(undefined)).toBe(0);
   });
 });

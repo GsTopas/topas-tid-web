@@ -22,7 +22,7 @@ type EmpStats = {
   barn: number;
   "øvr": number;
   flex: number;
-  /** Vagttelefon-timer (lægges oveni normtiden, så også i Flex). */
+  /** Vagttelefon-timer (kun vist; tæller ikke med i Registreret eller Flex). */
   vagt: number;
   reg: number;
   _wn: WeeklyNorm;
@@ -107,10 +107,8 @@ export function FravaerLoen() {
         // Hel fraværsdag uden angivne timer tæller som dagens norm
         s.reg += e.absence_hours != null ? fravaerTimer : dagsNorm;
       }
-      // Vagttelefon lægges oveni normtiden (også på en dag uden arbejde).
-      const vagt = oncallHours(e);
-      s.vagt += vagt;
-      s.flex += vagt;
+      // Vagttelefon vises i sin egen kolonne og tæller ikke med i Flex.
+      s.vagt += oncallHours(e);
       if (e.absence_type === "Ferie") {
         // ½ feriedag (ferie på en arbejdsdag) tæller 0,5
         s.ferie += holidayDays(e);

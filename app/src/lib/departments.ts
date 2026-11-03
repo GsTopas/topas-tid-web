@@ -11,7 +11,7 @@ export const isSimpleDepartment = (department: string | null | undefined): boole
 
 /**
  * Afdelinger med vagttelefon: i Min tid kan de skrive timer på vagttelefonen på en dag (også en dag uden arbejde,
- * fx en søndag). Timerne lægges oveni normtiden (plus i Kontrol, ÅTD saldo og Flex).
+ * fx en søndag). Timerne vises kun i en separat kolonne og tæller ikke med i Kontrol, saldo eller Flex.
  */
 export const ONCALL_DEPARTMENTS = ["Topas Travel"];
 

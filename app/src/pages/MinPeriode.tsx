@@ -80,13 +80,9 @@ export function MinPeriode({ boot }: { boot: Boot }) {
     const work = entry?.work_hours != null ? Number(entry.work_hours) : null;
     const absence = entry?.absence_hours != null ? Number(entry.absence_hours) : 0;
     const allocated = Number(data.day_alloc?.[date] || 0);
-    // Vagttelefon lægges oveni normtiden: plus i Kontrol, også på en dag uden arbejde.
+    // Vagttelefon vises kun i sin egen kolonne; den tæller ikke med i Kontrol eller saldo.
     const oncall = oncallHours(entry);
-    const isWorkEntry = work != null && entry != null && !!entry.location;
-    const control = (isWorkEntry ? (work as number) + absence - normFor(date) : 0) + oncall;
-    const hasControl = isWorkEntry || oncall > 0;
     sumOncall += oncall;
-    sumControl += oncall;
     // Dagen er ikke fuldt fordelt på projekter.
     const mismatch = work != null && entry?.location && Math.abs(allocated - work) > 0.01;
     if (work != null && entry != null && entry.location) {
@@ -121,7 +117,7 @@ export function MinPeriode({ boot }: { boot: Boot }) {
       arb: work != null ? fmtNum(work) : "",
       vagt: oncall > 0 ? fmtNum(oncall) : "",
       ford: work != null && entry != null && entry.location ? mismatch ? `${fmtNum(allocated)} ⚠` : fmtNum(allocated) : "",
-      ktrl: hasControl ? (control >= 0 ? "+" : "") + fmtNum(control) : "",
+      ktrl: work != null && entry != null && entry.location ? (work + absence - normFor(date) >= 0 ? "+" : "") + fmtNum(work + absence - normFor(date)) : "",
       note,
       _cls: cls
     });
