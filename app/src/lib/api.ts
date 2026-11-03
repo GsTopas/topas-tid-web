@@ -83,6 +83,8 @@ export interface DayEntrySummary {
   absence_type: string | null;
   work_hours: number | null;
   absence_hours: number | null;
+  /** Vagttelefon-timer (oveni normtiden). */
+  oncall_hours?: number | null;
 }
 
 export interface AllocSum {
@@ -103,6 +105,8 @@ export interface DayEntryDetail {
   time_out: string | null;
   work_hours: number | null;
   note: string | null;
+  /** Vagttelefon-timer (oveni normtiden). */
+  oncall_hours?: number | null;
 }
 
 export interface DayAllocation {
@@ -132,6 +136,8 @@ export interface SaveDayInput {
   time_out?: string | null;
   work_hours?: number | null;
   note?: string | null;
+  /** Vagttelefon-timer; > 0 gemmer dagen også ved "Ingen". */
+  oncall_hours?: number | null;
   allocations?: SaveDayAllocation[];
 }
 
@@ -148,6 +154,8 @@ export interface MyPeriodEntry {
   time_out: string | null;
   work_hours: number | null;
   note: string | null;
+  /** Vagttelefon-timer (oveni normtiden). */
+  oncall_hours?: number | null;
 }
 
 /** Rows from rpc department_rows. */
@@ -200,6 +208,8 @@ export interface MatrixEntry {
   location: string | null;
   absence_type: string | null;
   work_hours: number | null;
+  /** Vagttelefon-timer (oveni normtiden). */
+  oncall_hours?: number | null;
 }
 
 export interface MatrixAllocSum {
@@ -333,6 +343,8 @@ export interface DayEntryRow {
   work_hours: number | null;
   note: string | null;
   updated_at?: string | null;
+  /** Vagttelefon-timer (oveni normtiden). */
+  oncall_hours?: number | null;
 }
 
 interface AbsenceEmployeeRow {
@@ -676,7 +688,7 @@ export const api = {
       q<DayEntrySummary>(
         supabase
           .from("day_entries")
-          .select("work_date, location, absence_type, work_hours, absence_hours")
+          .select("work_date, location, absence_type, work_hours, absence_hours, oncall_hours")
           .eq("employee_id", empId)
           .gte("work_date", from)
           .lte("work_date", to),
@@ -711,7 +723,7 @@ export const api = {
         supabase
           .from("day_entries")
           .select(
-            "work_date, location, location_note, absence_type, absence_note, absence_hours, absence_code, absence_choice, time_in, time_out, work_hours, note",
+            "work_date, location, location_note, absence_type, absence_note, absence_hours, absence_code, absence_choice, time_in, time_out, work_hours, note, oncall_hours",
           )
           .eq("employee_id", empId)
           .eq("work_date", date),
@@ -738,7 +750,9 @@ export const api = {
     if (locked.length) {
       throw new Error("Perioden er låst af økonomi");
     }
-    if (input.day_type === "Ingen") {
+    const oncall = input.oncall_hours != null && input.oncall_hours > 0 ? input.oncall_hours : null;
+    // "Ingen" sletter dagen — undtagen når der er vagttelefon-timer: så gemmes en række uden arbejde og fravær.
+    if (input.day_type === "Ingen" && !oncall) {
       await q(supabase.from("allocations").delete().eq("employee_id", target.id).eq("work_date", date).select("id"));
       const gone = await q(
         supabase.from("day_entries").delete().eq("employee_id", target.id).eq("work_date", date).select("id"),
@@ -774,6 +788,7 @@ export const api = {
         time_out: isWork ? input.time_out : null,
         work_hours: isWork ? input.work_hours : null,
         note: input.note,
+        oncall_hours: oncall,
         updated_at: new Date().toISOString(),
       },
       { onConflict: "employee_id,work_date" },
@@ -819,7 +834,7 @@ export const api = {
         supabase
           .from("day_entries")
           .select(
-            "work_date, location, location_note, absence_type, absence_note, absence_hours, absence_code, absence_choice, time_in, time_out, work_hours, note",
+            "work_date, location, location_note, absence_type, absence_note, absence_hours, absence_code, absence_choice, time_in, time_out, work_hours, note, oncall_hours",
           )
           .eq("employee_id", empId)
           .gte("work_date", from)
@@ -908,7 +923,7 @@ export const api = {
       q<MatrixEntry>(
         supabase
           .from("day_entries")
-          .select("employee_id, work_date, location, absence_type, work_hours")
+          .select("employee_id, work_date, location, absence_type, work_hours, oncall_hours")
           .gte("work_date", from)
           .lte("work_date", to),
       ),
@@ -1458,7 +1473,7 @@ export const api = {
       q<KontrolEntry>(
         supabase
           .from("day_entries")
-          .select("work_date, location, work_hours, absence_hours")
+          .select("work_date, location, work_hours, absence_hours, oncall_hours")
           .eq("employee_id", employeeId)
           .gte("work_date", from)
           .lte("work_date", to),

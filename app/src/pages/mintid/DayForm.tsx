@@ -36,6 +36,8 @@ type Props = {
   totals: FormTotals;
   /** Enkel visning (fx Topas Travel): ingen timefordeling. */
   simple?: boolean;
+  /** Vagttelefon (fx Topas Travel): felt til vagttelefon-timer, også på en dag uden arbejde ("Ingen"). */
+  oncall?: boolean;
   patch: (p: Partial<DayFormState>) => void;
   updateAlloc: (idx: number, p: Partial<AllocLine>) => void;
   missingTask: (line: AllocLine) => boolean;
@@ -52,7 +54,7 @@ type Props = {
   locked?: boolean;
 };
 
-export function DayForm({ form, setForm, date, boot, normHours, totals, simple = false, patch, updateAlloc, missingTask, partialAbsence, onSaveDefaults, onAddLine, onPickType, companyNames, locked = false }: Props) {
+export function DayForm({ form, setForm, date, boot, normHours, totals, simple = false, oncall = false, patch, updateAlloc, missingTask, partialAbsence, onSaveDefaults, onAddLine, onPickType, companyNames, locked = false }: Props) {
   const { isWorkDay, isAbsenceDay, total, allocated, remaining, pct, over, done, taskRequired } = totals;
   return <section className="dayform"><h2>{WEEKDAYS_LONG[weekdayIdx(date)]} {fmtDate(date)}</h2>{normHours > 0 && <span className="muted">Normal arbejdstid: {fmtNum(normHours)} timer</span>}<fieldset className="lockable" disabled={locked}><div className="types">{DAY_TYPES.map(([type, icon]) => <button className={"type" + (form.day_type === type ? " sel" : "")} onClick={() => onPickType(type)} key={type}><span>{icon}</span> {type}</button>)}</div>{LOCATION_NOTE_TYPES.includes(form.day_type) && <input className="wide" placeholder={form.day_type === "Rejsedag" ? "Hvor? (fx Vietnam)" : "Hvor? (fx hjemmefra)"} value={form.location_note} onChange={e => patch({
       location_note: e.target.value
@@ -99,7 +101,9 @@ export function DayForm({ form, setForm, date, boot, normHours, totals, simple =
       const sum = (parseNum(form.work_hours) || 0) + (parseNum(form.absence_hours) || 0);
       const diff = Math.round((sum - normHours) * 100) / 100;
       return <p className={"small " + (Math.abs(diff) > 0.01 ? "warn" : "muted")}>Arbejde + fravær = {fmtNum(sum)} t{Math.abs(diff) > 0.01 ? ` — afvigelse ${diff > 0 ? "+" : ""}${fmtNum(diff)} t fra normal tid` : " (= normal tid)"}</p>;
-    })()}<input className="wide" placeholder="Note om dagen (fx været til kursus, fysio …)" value={form.note} onChange={e => patch({
+    })()}{oncall && <div className="row oncall"><label>📞 Vagttelefon (timer)<input className="hours" inputMode="decimal" placeholder="0" value={form.oncall_hours} title="Timer på vagttelefonen denne dag" onChange={e => patch({
+          oncall_hours: e.target.value
+        })} /></label><span className="muted small">Vises for sig selv og tæller ikke med i arbejdstid eller saldo</span></div>}<input className="wide" placeholder="Note om dagen (fx været til kursus, fysio …)" value={form.note} onChange={e => patch({
       note: e.target.value
     })} />{isWorkDay && !simple && <><h3>Timefordeling</h3><table className="alloc"><thead><tr><th>Virksomhed/projekt</th>{boot.task_options.length > 0 && <th>Opgavetype</th>}<th>Timer</th><th>Opgavenote</th><th /></tr></thead><tbody>{form.allocations.map((line, idx) => <tr key={idx}><td className="a-comp" data-label="Virksomhed/projekt"><select value={line.company_id || ""} onChange={e => updateAlloc(idx, {
                 company_id: e.target.value

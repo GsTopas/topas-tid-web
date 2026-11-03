@@ -131,6 +131,13 @@ export function AfdelingsOverblik({ emp, flash }: { emp: SessionEmployee | null;
               };
             }
           }
+          // Dag uden arbejde og fravær, kun med vagttelefon ("Ingen" + vagttelefon).
+          if (!W.absence_type && Number(W.oncall_hours || 0) > 0) {
+            return {
+              c: "📞",
+              cls: "m-wknd"
+            };
+          }
           return {
             c: ABSENCE_LETTER[W.absence_type as string] || "✓",
             cls: "m-abs"

@@ -241,6 +241,15 @@ h2 {
   flex-wrap: wrap
 }
 
+/* Vagttelefon i Min tid: forklaringen står ud for feltet */
+.row.oncall {
+  align-items: flex-end
+}
+
+.row.oncall>.muted {
+  padding-bottom: 11px
+}
+
 label {
   display: flex;
   flex-direction: column;

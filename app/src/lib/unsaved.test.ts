@@ -14,12 +14,16 @@ const base: DayFormState = {
   lunch_min: 30,
   work_hours: "7,5",
   note: "",
+  oncall_hours: "",
   allocations: [{ company_id: 3, task_type: "Drift", hours: "7,5", task_note: "" }]
 };
 
 describe("formChanged (påmindelse om ikke-gemt dag)", () => {
   it("er falsk når intet er ændret", () => {
     expect(formChanged({ ...base }, base)).toBe(false);
+  });
+  it("er sand når vagttelefon-timerne er ændret", () => {
+    expect(formChanged({ ...base, oncall_hours: "2" }, base)).toBe(true);
   });
   it("er falsk før formularen er hentet", () => {
     expect(formChanged(null, base)).toBe(false);

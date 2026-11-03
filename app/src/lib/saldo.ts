@@ -9,10 +9,14 @@ export interface KontrolEntry {
   absence_hours: number | string | null;
 }
 
+/** Vagttelefon-timer på en dag (0 når der ingen er). */
+export const oncallHours = (e: { oncall_hours?: number | string | null } | null | undefined): number =>
+  e?.oncall_hours != null ? Number(e.oncall_hours) || 0 : 0;
+
 /**
  * Sum af Kontrol-kolonnen (arbejdstid + fravær − dagens norm) for dage med
  * registreret arbejdssted — samme regel som "I ALT" i Min periode. Dagens norm følger
- * normugens dagsfordeling, når den gælder (se lib/norm.ts).
+ * normugens dagsfordeling, når den gælder (se lib/norm.ts). Vagttelefon tæller ikke med.
  */
 export function kontrolSum(entries: KontrolEntry[], norm: Norm | null | undefined, splits?: NormSplit[] | null): number {
   let sum = 0;

@@ -200,6 +200,7 @@ export function useMinTid(boot: Boot | null) {
           lunch_min: lunch,
           work_hours: fmtNum(workHours(timeIn, timeOut, lunch, partialAbs)),
           note: entry?.note || "",
+          oncall_hours: entry?.oncall_hours != null && Number(entry.oncall_hours) > 0 ? fmtNum(Number(entry.oncall_hours)) : "",
           allocations: res.allocations.map(a => ({
             company_id: a.company_id,
             task_type: a.task_type || "",
