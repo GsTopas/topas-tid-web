@@ -18,3 +18,13 @@ describe("kontrolSum", () => {
     ], norm)).toBe(0);
   });
 });
+
+describe("kontrolSum med vagttelefon", () => {
+  it("lægger vagttelefon-timer oveni, også på en dag uden arbejde", () => {
+    expect(kontrolSum([
+      { work_date: "2026-10-05", location: "Kontor", work_hours: 7.5, absence_hours: null, oncall_hours: 2 }, // man: 0 + 2
+      { work_date: "2026-11-01", location: null, work_hours: null, absence_hours: null, oncall_hours: "1.5" }, // søn, "Ingen": +1,5
+      { work_date: "2026-10-06", location: null, work_hours: null, absence_hours: 7.5, oncall_hours: null }, // hel fraværsdag: 0
+    ], norm)).toBe(3.5);
+  });
+});

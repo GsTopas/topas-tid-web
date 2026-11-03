@@ -2,7 +2,8 @@ import { Fragment, useEffect, useState } from "react";
 import { api, type Boot } from "../lib/api";
 import { fmtDate, fmtNum, weekdayIdx } from "../lib/format";
 import { dayNorm, type NormSplit } from "../lib/norm";
-import { isSimpleDepartment } from "../lib/departments";
+import { hasOncall, isSimpleDepartment } from "../lib/departments";
+import { oncallHours } from "../lib/saldo";
 import { absenceLabel } from "./mintid/constants";
 
 const fmtSigned = (n: number) => (n >= 0 ? "+" : "") + fmtNum(n);
@@ -62,6 +63,8 @@ export function MinPeriode({ boot }: { boot: Boot }) {
   const who = isSelf ? "Du" : selected?.name || "Medarbejderen";
   /** Enkel visning (fx Topas Travel): ingen fordeling på projekter, så kolonnen "Fordelt" udelades. */
   const simple = isSimpleDepartment(isSelf ? me?.department : selected?.department);
+  /** Kolonnen "Vagttelefon": for afdelinger med vagttelefon, eller når perioden har vagttelefon-timer. */
+  const showOncall = hasOncall(isSelf ? me?.department : selected?.department) || data.entries.some(e => oncallHours(e) > 0);
   const rows: Row[] = [];
   let date = period.start_date;
   let sumWork = 0;
@@ -70,12 +73,20 @@ export function MinPeriode({ boot }: { boot: Boot }) {
   let sumUnpaid = 0;
   let sumControl = 0;
   let sumAllocated = 0;
+  let sumOncall = 0;
   while (date <= period.end_date) {
     const entry: DayEntry | undefined = byDate[date];
     const weekend = weekdayIdx(date) >= 5;
     const work = entry?.work_hours != null ? Number(entry.work_hours) : null;
     const absence = entry?.absence_hours != null ? Number(entry.absence_hours) : 0;
     const allocated = Number(data.day_alloc?.[date] || 0);
+    // Vagttelefon lægges oveni normtiden: plus i Kontrol, også på en dag uden arbejde.
+    const oncall = oncallHours(entry);
+    const isWorkEntry = work != null && entry != null && !!entry.location;
+    const control = (isWorkEntry ? (work as number) + absence - normFor(date) : 0) + oncall;
+    const hasControl = isWorkEntry || oncall > 0;
+    sumOncall += oncall;
+    sumControl += oncall;
     // Dagen er ikke fuldt fordelt på projekter.
     const mismatch = work != null && entry?.location && Math.abs(allocated - work) > 0.01;
     if (work != null && entry != null && entry.location) {
@@ -90,7 +101,7 @@ export function MinPeriode({ boot }: { boot: Boot }) {
       }
     }
     const note = [entry?.location_note, entry?.note].filter(Boolean).join(" · ");
-    const cls: Record<string, string> = weekend ? Object.fromEntries(["dato", "sted", "frav", "fravt", "ind", "ud", "arb", "ford", "ktrl", "note"].map(k => [k, "wknd"])) : {
+    const cls: Record<string, string> = weekend ? Object.fromEntries(["dato", "sted", "frav", "fravt", "ind", "ud", "arb", "vagt", "ford", "ktrl", "note"].map(k => [k, "wknd"])) : {
       frav: "gul",
       fravt: "gul",
       ind: "groen",
@@ -108,8 +119,9 @@ export function MinPeriode({ boot }: { boot: Boot }) {
       ind: entry?.time_in?.slice(0, 5) || "",
       ud: entry?.time_out?.slice(0, 5) || "",
       arb: work != null ? fmtNum(work) : "",
+      vagt: oncall > 0 ? fmtNum(oncall) : "",
       ford: work != null && entry != null && entry.location ? mismatch ? `${fmtNum(allocated)} ⚠` : fmtNum(allocated) : "",
-      ktrl: work != null && entry != null && entry.location ? (work + absence - normFor(date) >= 0 ? "+" : "") + fmtNum(work + absence - normFor(date)) : "",
+      ktrl: hasControl ? (control >= 0 ? "+" : "") + fmtNum(control) : "",
       note,
       _cls: cls
     });
@@ -140,7 +152,11 @@ export function MinPeriode({ boot }: { boot: Boot }) {
       key: "arb",
       label: "Arbejdstid",
       num: true
-    }, ...(simple ? [] : [{
+    }, ...(showOncall ? [{
+      key: "vagt",
+      label: "Vagttelefon",
+      num: true
+    }] : []), ...(simple ? [] : [{
       key: "ford",
       label: "Fordelt",
       num: true
@@ -159,6 +175,7 @@ export function MinPeriode({ boot }: { boot: Boot }) {
       ind: "",
       ud: "",
       arb: fmtNum(sumWork),
+      vagt: fmtNum(sumOncall),
       ford: fmtNum(sumAllocated) + (Math.abs(sumAllocated - sumWork) > 0.01 ? " ⚠" : ""),
       ktrl: (sumControl >= 0 ? "+" : "") + fmtNum(sumControl),
       note: ""
@@ -170,6 +187,7 @@ export function MinPeriode({ boot }: { boot: Boot }) {
       ind: "",
       ud: "",
       arb: "",
+      vagt: "",
       ford: "",
       ktrl: "",
       note: ""
@@ -181,6 +199,7 @@ export function MinPeriode({ boot }: { boot: Boot }) {
       ind: "",
       ud: "",
       arb: "",
+      vagt: "",
       ford: "",
       ktrl: "",
       note: ""
@@ -192,6 +211,7 @@ export function MinPeriode({ boot }: { boot: Boot }) {
       ind: "",
       ud: "",
       arb: "",
+      vagt: "",
       ford: "",
       ktrl: <span className="saldo">{saldo ? fmtSigned(saldo.start + saldo.kontrol) : "…"}</span>,
       note: ""

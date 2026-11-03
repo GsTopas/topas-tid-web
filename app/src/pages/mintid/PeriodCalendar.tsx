@@ -6,6 +6,7 @@ import type { DayStatusMap } from "./types";
  * arbejdsdag: fuldt fordelt → 🟢, ellers 🟠 (også med delvist fravær, ligesom ✓/~ i Afdelings overblik);
  * arbejdsdag uden arbejdstimer men med fravær og hel fraværsdag → fraværsikon; manglende arbejdsdag til og med i dag → 🔴.
  * Med enkel visning (`simple`, ingen fordeling) er en arbejdsdag med timer 🟢.
+ * En dag uden arbejde og fravær, men med vagttelefon-timer ("Ingen" + vagttelefon), er 📞.
  */
 export function dayStatusIcon(date: string, dayStatus: DayStatusMap, isOff: boolean, today: string, simple = false): string {
   const s = dayStatus[date];
@@ -20,6 +21,9 @@ export function dayStatusIcon(date: string, dayStatus: DayStatusMap, isOff: bool
       } else {
         return "🟠";
       }
+    }
+    if (!e.absence_type && Number(e.oncall_hours || 0) > 0) {
+      return "📞";
     }
     return ABSENCE_ICONS[String(e.absence_type)] || "📋";
   }

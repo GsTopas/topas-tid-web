@@ -5,6 +5,7 @@ import { addDays, fmtDate, fmtNum } from "../lib/format";
 import { holidayDays } from "../lib/ferie";
 import { downloadCsv } from "../lib/csv";
 import { absenceLabel } from "./mintid/constants";
+import { oncallHours } from "../lib/saldo";
 import { DataTable } from "../components/DataTable";
 import { useMultiPeriod } from "../hooks/usePeriods";
 import { MultiPeriodPicker } from "../components/PeriodPicker";
@@ -21,6 +22,8 @@ type EmpStats = {
   barn: number;
   "øvr": number;
   flex: number;
+  /** Vagttelefon-timer (lægges oveni normtiden, så også i Flex). */
+  vagt: number;
   reg: number;
   _wn: WeeklyNorm;
   _eid: number;
@@ -87,6 +90,7 @@ export function FravaerLoen() {
         barn: 0,
         "øvr": 0,
         flex: 0,
+        vagt: 0,
         reg: 0,
         _wn: e.weekly_norm as WeeklyNorm,
         _eid: e.employee_id,
@@ -103,6 +107,10 @@ export function FravaerLoen() {
         // Hel fraværsdag uden angivne timer tæller som dagens norm
         s.reg += e.absence_hours != null ? fravaerTimer : dagsNorm;
       }
+      // Vagttelefon lægges oveni normtiden (også på en dag uden arbejde).
+      const vagt = oncallHours(e);
+      s.vagt += vagt;
+      s.flex += vagt;
       if (e.absence_type === "Ferie") {
         // ½ feriedag (ferie på en arbejdsdag) tæller 0,5
         s.ferie += holidayDays(e);
@@ -185,7 +193,11 @@ export function FravaerLoen() {
       key: "øvr",
       label: "Øvrigt (t)",
       num: true
-    }, {
+    }, ...(Object.values(computed.stats).some(s => s.vagt > 0) ? [{
+      key: "vagt",
+      label: "Vagttelefon (t)",
+      num: true
+    }] : []), {
       key: "flex",
       label: "Flex",
       num: true
@@ -203,6 +215,7 @@ export function FravaerLoen() {
       syg: fmtNum(s.syg),
       barn: fmtNum(s.barn),
       "øvr": fmtNum(s["øvr"]),
+      vagt: fmtNum(s.vagt),
       flex: (s.flex >= 0 ? "+" : "") + fmtNum(s.flex),
       "ferieår": fmtNum(Number(ytd[navn]?.ferie_ytd || 0))
     }))} /><h3>Fraværsliste — til indberetning <button className="ghost" onClick={() => downloadCsv(`fravaersliste_${sel.month_name}_${sel.year}.csv`, [{

@@ -29,5 +29,7 @@ export type DayFormState = {
   lunch_min: number;
   work_hours: string;
   note: string;
+  /** Vagttelefon-timer ("" = ingen); kun for afdelinger med vagttelefon. */
+  oncall_hours: string;
   allocations: AllocLine[];
 };

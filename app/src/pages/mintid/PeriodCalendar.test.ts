@@ -16,6 +16,9 @@ describe("dayStatusIcon", () => {
   it("hel fraværsdag viser fraværsikonet", () => {
     expect(dayStatusIcon("2026-09-28", day({ location: null, absence_type: "Egen sygdom", absence_hours: 7.5 }, 0), false, "2026-10-27")).toBe("🤒");
   });
+  it("dag uden arbejde men med vagttelefon er 📞", () => {
+    expect(dayStatusIcon("2026-09-28", day({ location: null, absence_type: null, oncall_hours: 2 }, 0), true, "2026-10-27")).toBe("📞");
+  });
 });
 
 describe("absenceLabel", () => {
