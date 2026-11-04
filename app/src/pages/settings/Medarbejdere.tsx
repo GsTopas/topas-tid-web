@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import { api } from "../../lib/api";
-import { parseNum } from "../../lib/format";
+import { fmtDate, fmtNum, parseNum } from "../../lib/format";
+import type { NormSplit } from "../../lib/norm";
+import type { HourCredit, Period } from "../../lib/api";
+import { TilskrevneTimer } from "./TilskrevneTimer";
 import { isSimpleDepartment } from "../../lib/departments";
 import { DEPARTMENTS, SaveAllBar, keepDirty, randomTempPassword, saveDirtyRows, splitWeeklyNorm, sumNorm, useDirtyRows } from "./shared";
 
@@ -44,6 +47,8 @@ type EmployeeRow = Omit<Employee, EditedFields> & {
   active: boolean;
   /** Redigeret Norm/uge-tekst (kun sat når brugeren har rørt feltet). */
   norm_uge?: string;
+  /** Startdatoen på lønperioden, den nye Norm/uge gælder fra (standard: den aktuelle periode). */
+  norm_fra?: string;
 };
 
 type NewEmployee = {
@@ -78,16 +83,53 @@ export function Medarbejdere({ flash }: { flash: (msg: string) => void }) {
   const [employerFilter, setEmployerFilter] = useState<EmployerFilter>("");
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const edits = useDirtyRows<EmployeeRow["id"]>();
+  const [periods, setPeriods] = useState<Period[]>([]);
+  /** Normtidens historik (norm_contract) pr. medarbejder. */
+  const [history, setHistory] = useState<Record<number, NormSplit[]>>({});
+  const [credits, setCredits] = useState<HourCredit[]>([]);
+  /** Medarbejderen hvis tilskrevne timer vises under tabellen. */
+  const [creditEmp, setCreditEmp] = useState<EmployeeRow["id"] | null>(null);
+  const loadHistory = () => api.normSplits().then(list => {
+    const out: Record<number, NormSplit[]> = {};
+    for (const c of list.filter(x => x.contract)) {
+      (out[c.employee_id] = out[c.employee_id] || []).push(c);
+    }
+    setHistory(out);
+  }).catch(() => {});
+  const loadCredits = () => api.hourCredits().then(setCredits).catch(() => {});
   // Ikke-gemte rækker bevares ved genindlæsning (fx efter "Opret login"); login-status kommer fra databasen.
   const load = () => api.employeesAll().then(list =>
     setRows(prev => keepDirty(list as EmployeeRow[], prev, edits.current(), (f, l) => ({ ...l, auth_user_id: f.auth_user_id }))));
   useEffect(() => {
     load();
     api.companiesAll().then(setCompanies);
+    api.periods().then(setPeriods).catch(() => {});
+    loadHistory();
+    loadCredits();
   }, []);
   if (!rows) {
     return <p className="muted">Henter…</p>;
   }
+  const today = new Date().toISOString().slice(0, 10);
+  const currentPeriod = periods.find(p => p.start_date <= today && today <= p.end_date) || periods[periods.length - 1];
+  // Valgmuligheder for "gælder fra": lønperioder fra sidste år og frem.
+  const fromOptions = periods.filter(p => p.year >= Number(today.slice(0, 4)) - 1);
+  const periodName = (start: string) => {
+    const p = periods.find(x => x.start_date === start);
+    return p ? `${p.month_name} ${p.year}` : fmtDate(start);
+  };
+  const historyText = (id: EmployeeRow["id"]) => {
+    const list = (history[id] || []).slice().sort((a, b) => a.valid_from.localeCompare(b.valid_from));
+    return list.length > 1
+      ? "\nNormtid over tid: " + list.map(c => `${fmtNum(sumNorm(c.weekly_norm))} t ${c.valid_from <= "1900-01-01" ? "fra start" : "fra " + periodName(c.valid_from) + " (" + fmtDate(c.valid_from) + ")"}`).join(", ")
+      : "";
+  };
+  /** Planlagt normtid der endnu ikke gælder (valid_from efter i dag). */
+  const upcoming = (id: EmployeeRow["id"]) => (history[id] || []).filter(c => c.valid_from > today).sort((a, b) => a.valid_from.localeCompare(b.valid_from))[0];
+  const yearCredits = (id: EmployeeRow["id"]) => {
+    const ids = new Set(periods.filter(p => p.year === Number(today.slice(0, 4))).map(p => p.id));
+    return credits.filter(c => c.employee_id === id && ids.has(c.period_id)).reduce((sum, c) => sum + c.hours, 0);
+  };
   const companyName = (id: number | null) => (id == null ? "" : companies.find(c => c.id === id)?.name ?? "");
   // Valgmuligheder: aktive selskaber, plus det allerede valgte selv om det er inaktivt.
   const employerOptions = (current: number | null) =>
@@ -123,8 +165,16 @@ export function Medarbejdere({ flash }: { flash: (msg: string) => void }) {
         hourly_rate: isSimpleDepartment(p.department) ? 0 : parseNum(String(p.hourly_rate)) ?? 0,
         hired_date: p.hired_date || null,
         payroll_number: parsePayrollNumber(p.payroll_number),
-        flex_start: parseNum(String(p.flex_start ?? 0)) ?? 0,
-        ...(normChanged(p) ? { weekly_norm: splitWeeklyNorm(parseNum(String(p.norm_uge))) } : {})
+        flex_start: parseNum(String(p.flex_start ?? 0)) ?? 0
+      }).then(async () => {
+        // Ny normtid gælder kun fra den valgte lønperiode; tidligere perioder beholder den gamle.
+        if (normChanged(p)) {
+          const from = p.norm_fra || currentPeriod?.start_date;
+          if (!from) {
+            throw new Error("Vælg hvilken lønperiode den nye normtid gælder fra");
+          }
+          await api.saveNormContract(p.id, from, splitWeeklyNorm(parseNum(String(p.norm_uge))));
+        }
       });
   const saveAll = async () => {
     setSaving(true);
@@ -132,6 +182,7 @@ export function Medarbejdere({ flash }: { flash: (msg: string) => void }) {
     edits.reset(failed);
     setSaving(false);
     load();
+    loadHistory();
   };
   const undo = () => {
     edits.reset();
@@ -148,7 +199,7 @@ export function Medarbejdere({ flash }: { flash: (msg: string) => void }) {
       flash("❌ " + (w as Error).message);
     }
   };
-  return <div>{pwInfo && <p className="ok pwinfo">🔑 {pwInfo} — skriv det ned, det vises kun her!</p>}<div className="row"><label>Ansat i <select value={employerFilter} onChange={g => setEmployerFilter(g.target.value)}><option value="">Alle selskaber</option><option value="none">Ikke angivet</option>{companies.filter(c => c.kind === "selskab").map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label><label>Sortér efter <select value={sortKey} onChange={g => setSortKey(g.target.value as SortKey)}><option value="name">Navn</option><option value="employer">Ansat i</option><option value="department">Afdeling</option></select></label><span className="muted small" style={{ alignSelf: "flex-end", paddingBottom: 10 }}>{shown.length} af {rows.length} medarbejdere</span></div><div className="tablewrap"><table className="datatable admin"><thead><tr><th>Navn</th><th>Mail</th><th>Afdeling</th><th title="Selskabet medarbejderen er ansat i">Ansat i</th><th className="num">Timepris</th><th>Startdato</th><th className="num">Lønnr.</th><th className="num" title="Flex-saldo ved start (timer, kan være negativ)">Start saldo</th><th className="num" title="Normtid pr. uge — sæt ned ved deltid. Fordeles automatisk man–fre">Norm/uge</th><th>Admin</th><th>Leder</th><th title="Kan leder-godkende medarbejdere i alle afdelinger">Godkender alle</th><th>Aktiv</th><th>Login</th></tr></thead><tbody>{shown.map(p => <tr className={p.active ? "" : "inaktiv"} key={p.id}><td><input value={p.name} onChange={g => patch(p.id, {
+  return <div>{pwInfo && <p className="ok pwinfo">🔑 {pwInfo} — skriv det ned, det vises kun her!</p>}<div className="row"><label>Ansat i <select value={employerFilter} onChange={g => setEmployerFilter(g.target.value)}><option value="">Alle selskaber</option><option value="none">Ikke angivet</option>{companies.filter(c => c.kind === "selskab").map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label><label>Sortér efter <select value={sortKey} onChange={g => setSortKey(g.target.value as SortKey)}><option value="name">Navn</option><option value="employer">Ansat i</option><option value="department">Afdeling</option></select></label><span className="muted small" style={{ alignSelf: "flex-end", paddingBottom: 10 }}>{shown.length} af {rows.length} medarbejdere</span></div><div className="tablewrap"><table className="datatable admin"><thead><tr><th>Navn</th><th>Mail</th><th>Afdeling</th><th title="Selskabet medarbejderen er ansat i">Ansat i</th><th className="num">Timepris</th><th>Startdato</th><th className="num">Lønnr.</th><th className="num" title="Flex-saldo ved start (timer, kan være negativ)">Start saldo</th><th className="num" title="Normtid pr. uge — sæt ned ved deltid. Fordeles automatisk man–fre. En ændring gælder fra den valgte lønperiode og frem">Norm/uge</th><th className="num" title="Timer tilskrevet ÅTD saldo i år (fx afspadsering for vagttelefon), pr. lønperiode">Timer tilskrives</th><th>Admin</th><th>Leder</th><th title="Kan leder-godkende medarbejdere i alle afdelinger">Godkender alle</th><th>Aktiv</th><th>Login</th></tr></thead><tbody>{shown.map(p => <tr className={p.active ? "" : "inaktiv"} key={p.id}><td><input value={p.name} onChange={g => patch(p.id, {
                 name: g.target.value
               })} /></td><td><input value={p.email || ""} onChange={g => patch(p.id, {
                 email: g.target.value
@@ -164,9 +215,11 @@ export function Medarbejdere({ flash }: { flash: (msg: string) => void }) {
                 payroll_number: g.target.value
               })} /></td><td><input className="hours" title="Flex-saldo ved start (timer)" value={String(p.flex_start ?? 0).replace(".", ",")} onChange={g => patch(p.id, {
                 flex_start: g.target.value
-              })} /></td><td><input className="hours" title={"Dagsfordeling: " + (Array.isArray(p.weekly_norm) ? (p.weekly_norm as unknown[]).slice(0, 5).map(g => String(g).replace(".", ",")).join(" / ") : "")} value={p.norm_uge ?? String(sumNorm(p.weekly_norm)).replace(".", ",")} onChange={g => patch(p.id, {
+              })} /></td><td><input className="hours" title={"Dagsfordeling: " + (Array.isArray(p.weekly_norm) ? (p.weekly_norm as unknown[]).slice(0, 5).map(g => String(g).replace(".", ",")).join(" / ") : "") + historyText(p.id)} value={p.norm_uge ?? String(sumNorm(p.weekly_norm)).replace(".", ",")} onChange={g => patch(p.id, {
                 norm_uge: g.target.value
-              })} /></td><td><input type="checkbox" checked={p.is_admin} onChange={g => patch(p.id, {
+              })} />{normChanged(p) ? <label className="small">fra <select title="Lønperioden den nye normtid gælder fra. Tidligere perioder beholder den gamle normtid" value={p.norm_fra || currentPeriod?.start_date || ""} onChange={g => patch(p.id, {
+                norm_fra: g.target.value
+              })}>{fromOptions.map(x => <option key={x.id} value={x.start_date}>{x.month_name} {x.year} ({fmtDate(x.start_date)})</option>)}</select></label> : upcoming(p.id) ? <div className="muted small" title={historyText(p.id).trim()}>fra {periodName(upcoming(p.id)!.valid_from)}</div> : null}</td><td className="num"><button className="ghost" title="Vis og tilskriv timer pr. lønperiode" onClick={() => setCreditEmp(creditEmp === p.id ? null : p.id)}>{yearCredits(p.id) ? fmtNum(yearCredits(p.id)) + " t" : "＋"}</button></td><td><input type="checkbox" checked={p.is_admin} onChange={g => patch(p.id, {
                 is_admin: g.target.checked
               })} /></td><td><input type="checkbox" checked={p.is_manager} onChange={g => patch(p.id, {
                 is_manager: g.target.checked
@@ -174,7 +227,7 @@ export function Medarbejdere({ flash }: { flash: (msg: string) => void }) {
                 approves_all_departments: g.target.checked
               })} /></td><td><input type="checkbox" checked={p.active} onChange={g => patch(p.id, {
                 active: g.target.checked
-              })} /></td><td>{p.auth_user_id ? <button className="ghost" onClick={() => manageLogin(p, "reset")}>Nulstil pw</button> : p.email ? <button className="ghost" onClick={() => manageLogin(p, "create")}>Opret login</button> : <span className="muted">mangler mail</span>}</td></tr>)}</tbody></table></div><SaveAllBar count={edits.dirty.size} saving={saving} onSave={saveAll} onUndo={undo} />{draft ? <div className="nyrow"><input placeholder="Navn" value={draft.name} onChange={p => setDraft({
+              })} /></td><td>{p.auth_user_id ? <button className="ghost" onClick={() => manageLogin(p, "reset")}>Nulstil pw</button> : p.email ? <button className="ghost" onClick={() => manageLogin(p, "create")}>Opret login</button> : <span className="muted">mangler mail</span>}</td></tr>)}</tbody></table></div><SaveAllBar count={edits.dirty.size} saving={saving} onSave={saveAll} onUndo={undo} />{creditEmp != null && <TilskrevneTimer key={creditEmp} empId={creditEmp} empName={rows.find(r => r.id === creditEmp)?.name || ""} periods={periods} credits={credits.filter(c => c.employee_id === creditEmp)} flash={flash} onChanged={loadCredits} onClose={() => setCreditEmp(null)} />}{draft ? <div className="nyrow"><input placeholder="Navn" value={draft.name} onChange={p => setDraft({
         ...draft,
         name: p.target.value
       })} /><input placeholder="mail@topas.dk" value={draft.email} onChange={p => setDraft({
@@ -241,5 +294,5 @@ export function Medarbejdere({ flash }: { flash: (msg: string) => void }) {
       admin: false,
       leder: false,
       hired: new Date().toISOString().slice(0, 10)
-    })}>➕ Ny medarbejder</button>}<p className="muted small">Norm/uge fordeles automatisk man–fre i kvarter (37 = 7,5/7,5/7,5/7,5/7 t; 30 = 6 t om dagen) — sæt den ned ved deltid. Start saldo = flex-saldo ved start. Opret login bagefter i Login-kolonnen.</p></div>;
+    })}>➕ Ny medarbejder</button>}<p className="muted small">Norm/uge fordeles automatisk man–fre i kvarter (37 = 7,5/7,5/7,5/7,5/7 t; 30 = 6 t om dagen) — sæt den ned ved deltid. En ændring gælder fra den valgte lønperiode og frem; tidligere perioder beregnes med den gamle normtid (hold musen over feltet for at se historikken). Timer tilskrives = timer der lægges til ÅTD saldo for en lønperiode, fx afspadsering for vagttelefon; de indtastes manuelt (også i Afdelings overblik). Start saldo = flex-saldo ved start. Opret login bagefter i Login-kolonnen.</p></div>;
 }

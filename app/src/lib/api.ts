@@ -31,6 +31,15 @@ export type SessionEmployee = EmployeeSelfRow & {
   email: string | undefined;
 };
 
+/** Timer tilskrevet en medarbejder for en lønperiode (fx afspadsering for vagttelefon); tæller i ÅTD saldo. */
+export interface HourCredit {
+  employee_id: number;
+  period_id: number;
+  hours: number;
+  note: string | null;
+  created_at: string;
+}
+
 export interface Period {
   id: number;
   year: number;
@@ -1464,9 +1473,12 @@ export const api = {
     }
   },
 
-  /** ÅTD saldo: medarbejderens start saldo (flex_start) + sum af Kontrol fra `from` til `to`. */
-  async atdSaldo(from: string, to: string, employeeId: number): Promise<{ start: number; kontrol: number }> {
-    const [emps, entries, splits] = await Promise.all([
+  /**
+   * ÅTD saldo: medarbejderens start saldo (flex_start) + sum af Kontrol fra `from` til `to`
+   * + timer tilskrevet (hour_credits) for lønperioder der ligger helt inden for `from`–`to`.
+   */
+  async atdSaldo(from: string, to: string, employeeId: number): Promise<{ start: number; kontrol: number; tilskrevet: number }> {
+    const [emps, entries, splits, credits] = await Promise.all([
       q<{ flex_start: number | null; weekly_norm: WeeklyNorm | null }>(
         supabase.from("employees").select("flex_start, weekly_norm").eq("id", employeeId),
       ),
@@ -1479,11 +1491,21 @@ export const api = {
           .lte("work_date", to),
       ),
       api.normSplits(employeeId).catch(() => [] as NormSplit[]),
+      q<{ hours: number | string; periods: { start_date: string; end_date: string } | null }>(
+        supabase.from("hour_credits").select("hours, periods(start_date, end_date)").eq("employee_id", employeeId),
+      ).catch(() => []),
     ]);
     const emp = emps[0];
+    let tilskrevet = 0;
+    for (const c of credits) {
+      if (c.periods && c.periods.start_date >= from && c.periods.end_date <= to) {
+        tilskrevet += Number(c.hours) || 0;
+      }
+    }
     return {
       start: Number(emp?.flex_start || 0),
       kontrol: kontrolSum(entries, emp?.weekly_norm, splits),
+      tilskrevet,
     };
   },
 
@@ -1502,14 +1524,72 @@ export const api = {
     }));
   },
 
-  /** Normugens dagsfordelinger (norm_split) for en medarbejder, eller alle man må se. */
+  /**
+   * Normugens dagsfordelinger (norm_split) og normtidens historik (norm_contract, `contract: true`)
+   * for en medarbejder, eller alle man må se. dayNorm i lib/norm.ts bruger begge.
+   */
   async normSplits(employeeId?: number): Promise<NormSplit[]> {
     let query = supabase.from("norm_split").select("employee_id, valid_from, weekly_norm").order("valid_from");
+    let contracts = supabase.from("norm_contract").select("employee_id, valid_from, weekly_norm").order("valid_from");
     if (employeeId != null) {
       query = query.eq("employee_id", employeeId);
+      contracts = contracts.eq("employee_id", employeeId);
     }
-    const rows = await q<NormSplit>(query);
-    return rows.map((r) => ({ ...r, weekly_norm: (r.weekly_norm || []).map(Number) }));
+    const [rows, contractRows] = await Promise.all([
+      q<NormSplit>(query),
+      // Uden historik (tabellen mangler eller ingen ret) bruges employees.weekly_norm som før.
+      q<NormSplit>(contracts).catch(() => [] as NormSplit[]),
+    ]);
+    return [
+      ...rows.map((r) => ({ ...r, weekly_norm: (r.weekly_norm || []).map(Number) })),
+      ...contractRows.map((r) => ({ ...r, weekly_norm: (r.weekly_norm || []).map(Number), contract: true })),
+    ];
+  },
+
+  /** Ny normtid (Norm/uge) gældende fra `validFrom` (starten af en lønperiode). Kun admin. */
+  async saveNormContract(employeeId: number, validFrom: string, weeklyNorm: number[]): Promise<void> {
+    const { error } = await supabase.rpc("save_norm_contract", {
+      p_employee_id: employeeId,
+      p_valid_from: validFrom,
+      p_weekly_norm: weeklyNorm,
+    });
+    if (error) {
+      raise(error);
+    }
+  },
+
+  /** Sletter en normtidsændring (ikke den første). Kun admin. */
+  async deleteNormContract(employeeId: number, validFrom: string): Promise<void> {
+    const { error } = await supabase.rpc("delete_norm_contract", { p_employee_id: employeeId, p_valid_from: validFrom });
+    if (error) {
+      raise(error);
+    }
+  },
+
+  /** Tilskrevne timer (hour_credits) for en medarbejder, eller alle man må se; evt. kun én lønperiode. */
+  async hourCredits(opts: { employeeId?: number; periodId?: number } = {}): Promise<HourCredit[]> {
+    let query = supabase.from("hour_credits").select("employee_id, period_id, hours, note, created_at");
+    if (opts.employeeId != null) {
+      query = query.eq("employee_id", opts.employeeId);
+    }
+    if (opts.periodId != null) {
+      query = query.eq("period_id", opts.periodId);
+    }
+    const rows = await q<HourCredit>(query);
+    return rows.map((r) => ({ ...r, hours: Number(r.hours) }));
+  },
+
+  /** Tilskriver timer for en lønperiode (leder i afdelingen eller admin). 0 sletter. */
+  async saveHourCredit(employeeId: number, periodId: number, hours: number, note: string): Promise<void> {
+    const { error } = await supabase.rpc("save_hour_credit", {
+      p_employee_id: employeeId,
+      p_period_id: periodId,
+      p_hours: hours,
+      p_note: note,
+    });
+    if (error) {
+      raise(error);
+    }
   },
 
   /** Gemmer hele normugen (RPC: skriver alle 7 ugedage i én transaktion; ugedage der ikke er med, bliver tomme). */

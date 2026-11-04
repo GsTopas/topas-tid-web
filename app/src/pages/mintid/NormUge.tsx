@@ -91,7 +91,7 @@ export function NormUge({ empId, empName, weeklyNorm, days, splits, onSaved, fla
   const matches = Math.abs(normSum - contractSum) < 0.01;
   const changed = edits.dirty.size > 0;
   // Den seneste gemte dagsfordeling, og om den gælder nu (samme ugesum som kontrakten).
-  const latest = (splits || []).reduce<NormSplit | null>((best, s) => !best || s.valid_from > best.valid_from ? s : best, null);
+  const latest = (splits || []).filter(s => !s.contract).reduce<NormSplit | null>((best, s) => !best || s.valid_from > best.valid_from ? s : best, null);
   const active = latest ? activeSplit(weeklyNorm, [latest], latest.valid_from) : null;
   const contractDays = WEEKDAYS_LONG.slice(0, 5).map((_d, i) => fmtNum(Number(weeklyNorm?.[i] || 0))).join(" / ");
 
