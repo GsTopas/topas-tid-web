@@ -36,7 +36,7 @@ Derived from `employees` flags. The frontend computes `can_economy = is_admin ||
 | Employee | Min tid, Min periode, Afdelings indsigt | Register own days in unlocked periods, save a personal default split |
 | Manager (`is_manager`) | + Medarbejder pr. periode, Afdelings overblik, Settings (partial) | Read own department's registrations, register on behalf of own department, leader-approve own department, edit companies/projects, own department's task types and hour pools |
 | Økonomi manager / admin (`can_economy`) | + Fakturering, Fravær & løn | See everything, economy-approve (= payroll lock), lock periods, set pay codes |
-| Admin (`is_admin`) | + Settings: Medarbejdere, Fordelingsregler, Projekt-adgang | Create employees and logins, billing rules, access lists |
+| Admin (`is_admin`) | + Settings: Medarbejdere, Fordelingsregler, Adgang (selskaber + projekter; tidligere "Projekt-adgang") | Create employees and logins, billing rules, access lists |
 
 Departments (hard-coded list in the UI): Marketing, Økonomi, Digital Transformation, IT, Hotel & Administration.
 
@@ -113,7 +113,7 @@ Input for the selected period(s):
   - Selskaber & projekter.
   - Fordelingsregler (shares must sum to ≤ 100 %).
   - Opgavetyper.
-  - Projekt-adgang.
+  - Adgang (tidligere "Projekt-adgang"): selskaber og projekter i hver sin sektion.
   - Timepuljer.
 
 ## 8. Gaps and risks found
