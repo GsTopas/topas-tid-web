@@ -1,10 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api, type HourCredit, type Period } from "../../lib/api";
 import { fmtDate, fmtNum, parseNum } from "../../lib/format";
 
 /**
  * Timer tilskrevet en medarbejder pr. lønperiode (hour_credits), fx afspadsering på baggrund af
- * vagttelefon. Indtastes manuelt ved periodens afslutning og lægges til ÅTD saldo.
+ * vagttelefon, vist som pop-up midt på skærmen. Indtastes manuelt ved periodens afslutning og lægges til ÅTD saldo.
  */
 export function TilskrevneTimer({
   empId,
@@ -30,6 +30,11 @@ export function TilskrevneTimer({
   const [hours, setHours] = useState(existing ? fmtNum(existing.hours) : "");
   const [note, setNote] = useState(existing?.note || "");
   const [saving, setSaving] = useState(false);
+  useEffect(() => {
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", esc);
+    return () => window.removeEventListener("keydown", esc);
+  }, [onClose]);
   const pick = (id: number | "") => {
     setPeriodId(id);
     const c = credits.find(x => x.period_id === id);
@@ -53,5 +58,5 @@ export function TilskrevneTimer({
     .map(c => ({ c, p: periodById(c.period_id) }))
     .sort((a, b) => (b.p?.start_date || "").localeCompare(a.p?.start_date || ""));
   const parsed = hours.trim() === "" ? 0 : parseNum(hours);
-  return <section className="dayform"><h3>Timer tilskrives: {empName} <button className="ghost" onClick={onClose}>✕</button></h3><p className="muted small">Timer der lægges til ÅTD saldo for en lønperiode, fx afspadsering på baggrund af vagttelefon. Der sker ingen automatisk omregning; skriv det antal timer, aftalen giver. Tom eller 0 fjerner tilskrivningen.</p><div className="row"><label>Lønperiode <select value={periodId} onChange={e => pick(e.target.value ? Number(e.target.value) : "")}>{periods.map(p => <option key={p.id} value={p.id}>{p.month_name} {p.year} ({fmtDate(p.start_date)} – {fmtDate(p.end_date)})</option>)}</select></label><label>Timer <input className="hours" inputMode="decimal" placeholder="0" value={hours} onChange={e => setHours(e.target.value)} /></label><label>Note <input placeholder="fx vagttelefon" value={note} onChange={e => setNote(e.target.value)} /></label><button className="primary" disabled={saving || periodId === "" || parsed == null} onClick={() => save(Number(periodId), parsed ?? 0, note)}>💾 Gem</button></div>{list.length ? <div className="tablewrap"><table className="datatable"><thead><tr><th>Lønperiode</th><th className="num">Timer</th><th>Note</th><th>Indtastet</th><th></th></tr></thead><tbody>{list.map(({ c, p }) => <tr key={c.period_id}><td>{p ? `${p.month_name} ${p.year}` : c.period_id}</td><td className="num">{fmtNum(c.hours)}</td><td>{c.note || ""}</td><td className="muted small">{fmtDate(c.created_at.slice(0, 10))}</td><td><button className="ghost" title="Fjern tilskrivningen" disabled={saving} onClick={() => save(c.period_id, 0, "")}>✕</button></td></tr>)}</tbody></table></div> : <p className="muted small">Ingen tilskrevne timer endnu.</p>}</section>;
+  return <div className="modal-backdrop" onClick={onClose}><div className="modal" role="dialog" aria-modal="true" aria-labelledby="tilskriv-titel" style={{ width: "min(640px, 100%)" }} onClick={e => e.stopPropagation()}><h3 id="tilskriv-titel">Timer tilskrives · {empName}</h3><p className="muted small">Timer der lægges til ÅTD saldo for en lønperiode, fx afspadsering på baggrund af vagttelefon. Der sker ingen automatisk omregning; skriv det antal timer, aftalen giver. Tom eller 0 fjerner tilskrivningen.</p><div className="row"><label>Lønperiode <select value={periodId} onChange={e => pick(e.target.value ? Number(e.target.value) : "")}>{periods.map(p => <option key={p.id} value={p.id}>{p.month_name} {p.year} ({fmtDate(p.start_date)} – {fmtDate(p.end_date)})</option>)}</select></label><label>Timer <input className="hours" inputMode="decimal" placeholder="0" autoFocus value={hours} onChange={e => setHours(e.target.value)} /></label><label>Note <input placeholder="fx vagttelefon" value={note} onChange={e => setNote(e.target.value)} /></label><button className="primary" disabled={saving || periodId === "" || parsed == null} onClick={() => save(Number(periodId), parsed ?? 0, note)}>💾 Gem</button></div>{list.length ? <div className="tablewrap"><table className="datatable"><thead><tr><th>Lønperiode</th><th className="num">Timer</th><th>Note</th><th>Indtastet</th><th></th></tr></thead><tbody>{list.map(({ c, p }) => <tr key={c.period_id}><td>{p ? `${p.month_name} ${p.year}` : c.period_id}</td><td className="num">{fmtNum(c.hours)}</td><td>{c.note || ""}</td><td className="muted small">{fmtDate(c.created_at.slice(0, 10))}</td><td><button className="ghost" title="Fjern tilskrivningen" disabled={saving} onClick={() => save(c.period_id, 0, "")}>✕</button></td></tr>)}</tbody></table></div> : <p className="muted small">Ingen tilskrevne timer endnu.</p>}<div className="modal-actions"><button className="ghost" onClick={onClose}>Luk</button></div></div></div>;
 }
