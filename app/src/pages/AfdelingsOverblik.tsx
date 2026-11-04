@@ -3,7 +3,7 @@ import { PeriodSelect } from "../components/PeriodPicker";
 import { usePeriod } from "../hooks/usePeriods";
 import { api, type SessionEmployee } from "../lib/api";
 import { downloadCsv } from "../lib/csv";
-import { addDays, approvedByText, fmtDate } from "../lib/format";
+import { addDays, approvedByText, fmtDate, fmtNum, parseNum } from "../lib/format";
 import { dayNorm, splitsByEmployee, type NormSplit } from "../lib/norm";
 import { DEPARTMENTS, isSimpleDepartment } from "../lib/departments";
 
@@ -11,6 +11,35 @@ type Matrix = Awaited<ReturnType<typeof api.ecoMatrix>>;
 type MatrixEmployee = Matrix["employees"][number];
 type MatrixEntry = Matrix["entries"][number];
 type Approval = Awaited<ReturnType<typeof api.approvalsForPeriod>>[number];
+type Credit = Awaited<ReturnType<typeof api.hourCredits>>[number];
+
+/**
+ * "Tilskrevet" for en medarbejder og lønperiode: timer leder/admin tilskriver ved periodens
+ * afslutning (fx afspadsering ud fra vagttelefon). Gemmes når feltet forlades; tæller i ÅTD saldo.
+ */
+function CreditCell({ credit, oncall, editable, title, onSave }: {
+  credit: Credit | undefined;
+  oncall: number;
+  editable: boolean;
+  title: string;
+  onSave: (hours: number) => Promise<void>;
+}) {
+  const saved = credit ? fmtNum(credit.hours) : "";
+  const [value, setValue] = useState(saved);
+  useEffect(() => setValue(saved), [saved]);
+  const commit = async () => {
+    if (value.trim() === saved) {
+      return;
+    }
+    const hours = value.trim() === "" ? 0 : parseNum(value);
+    if (hours == null) {
+      setValue(saved);
+      return;
+    }
+    await onSave(hours).catch(() => setValue(saved));
+  };
+  return <td className="num tilskriv" title={title}>{oncall > 0 && <span className="muted small" title="Vagttelefon-timer i perioden">📞 {fmtNum(oncall)} </span>}{editable ? <input className="hours" inputMode="decimal" placeholder="0" value={value} onChange={e => setValue(e.target.value)} onBlur={commit} onKeyDown={e => e.key === "Enter" && (e.target as HTMLInputElement).blur()} /> : <span>{saved}</span>}</td>;
+}
 
 /** Fraværstype → bogstav i matrixen (`Mj`). */
 const ABSENCE_LETTER: Record<string, string> = {
@@ -59,6 +88,39 @@ export function AfdelingsOverblik({ emp, flash }: { emp: SessionEmployee | null;
     }
   };
   useEffect(loadApprovals, [period?.id]);
+  /** Tilskrevne timer i perioden pr. medarbejder. */
+  const [credits, setCredits] = useState<Record<number, Credit>>({});
+  const loadCredits = () => {
+    setCredits({});
+    if (period) {
+      api.hourCredits({ periodId: period.id }).then(x => setCredits(Object.fromEntries(x.map(c => [c.employee_id, c])))).catch(() => {});
+    }
+  };
+  useEffect(loadCredits, [period?.id]);
+  /** Vagttelefon-timer i perioden pr. medarbejder (vises ved "Tilskrevet" som grundlag). */
+  const oncallByEmp = useMemo(() => {
+    const out: Record<number, number> = {};
+    for (const e of matrix?.entries || []) {
+      const h = Number(e.oncall_hours || 0);
+      if (h > 0) {
+        out[e.employee_id] = (out[e.employee_id] || 0) + h;
+      }
+    }
+    return out;
+  }, [matrix]);
+  // Tilskrive timer: samme ret som leder-godkendelse, plus admin; ikke efter lønkørsel (undtagen admin).
+  const canCredit = (x: MatrixEmployee, a: Approval | undefined) =>
+    emp != null && (!!emp.is_admin || canLeaderApprove(x) && !(a != null && a.economy_approved));
+  const saveCredit = async (empId: MatrixEmployee["id"], hours: number) => {
+    try {
+      await api.saveHourCredit(empId, period!.id, hours, "");
+      flash?.(hours ? `✓ ${fmtNum(hours)} t tilskrevet` : "✓ Tilskrivning fjernet");
+      loadCredits();
+    } catch (J) {
+      flash?.("❌ " + (J as Error).message);
+      throw J;
+    }
+  };
   // Leder-godkendelse: leder i medarbejderens egen afdeling, eller en med "Godkender alle afdelinger"
   const canLeaderApprove = (x: MatrixEmployee) => emp != null && (!!emp.approves_all_departments || !!emp.is_manager && x.department === emp.department);
   // Økonomi-godkendelse: admin eller leder i Økonomi
@@ -205,8 +267,8 @@ export function AfdelingsOverblik({ emp, flash }: { emp: SessionEmployee | null;
         afd: x.emp.department || "",
         antal: x.mangler,
         datoer: x.missDates.map(fmtDate).join(", ")
-      })))}>⬇️ Rykkerliste (Excel)</button></p> : <p className="ok">✅ Alle er ajour til dags dato.</p>}<div className="tablewrap"><table className="datatable matrix"><thead><tr><th>Medarbejder</th><th className="godk">Leder ✓</th><th className="godk">Økonomi 🔒</th>{table.dates.map(x => <th className="mday" key={x}>{x.slice(8, 10)}</th>)}<th className="num">Mangler</th><th className="num">Delvist</th></tr></thead><tbody>{shown.map(x => {
+      })))}>⬇️ Rykkerliste (Excel)</button></p> : <p className="ok">✅ Alle er ajour til dags dato.</p>}<div className="tablewrap"><table className="datatable matrix"><thead><tr><th>Medarbejder</th><th className="godk">Leder ✓</th><th className="godk">Økonomi 🔒</th><th className="num" title="Timer der tilskrives ÅTD saldo for perioden (fx afspadsering for vagttelefon). Indtastes af lederen ved periodens afslutning">Tilskrevet</th>{table.dates.map(x => <th className="mday" key={x}>{x.slice(8, 10)}</th>)}<th className="num">Mangler</th><th className="num">Delvist</th></tr></thead><tbody>{shown.map(x => {
             const a = approvals[x.emp.id];
-            return <tr key={x.emp.id}><td>{x.emp.name}</td><td className={"godk" + (a != null && a.leader_approved ? " godk-ok" : "")} title={leaderTitle(x.emp, a)}><input type="checkbox" checked={a != null && !!a.leader_approved} disabled={!canLeaderApprove(x.emp) || a != null && !!a.economy_approved} onChange={V => setLeader(x.emp.id, V.target.checked)} /></td><td className={"godk" + (a != null && a.economy_approved ? " godk-laast" : "")} title={economyTitle(a)}><input type="checkbox" checked={a != null && !!a.economy_approved} disabled={!canEconomyApprove || (a == null || !a.leader_approved) && (a == null || !a.economy_approved)} onChange={V => setEconomy(x.emp.id, V.target.checked)} /></td>{x.cells.map((V, W) => <td className={"mcell " + V.cls} key={W}>{V.c}</td>)}<td className={"num" + (x.mangler ? " error" : "")}>{x.mangler}</td><td className={"num" + (x.delvist ? " warn" : "")}>{x.delvist}</td></tr>;
-          })}</tbody></table></div><p className="muted small"><b>!</b> intet indtastet · <b>~</b> påbegyndt, fordeling mangler · <b>✓</b> alt fordelt ·<b> F</b> ferie · <b>S</b> sygdom · <b>B</b> barn syg · <b>Ø</b> øvrigt fravær</p><p className="muted small"><b>Godkendelse:</b> Afdelingslederen godkender først (Leder ✓), så kan medarbejderen ikke længere rette i perioden, men lederen kan stadig registrere på vegne af medarbejderen via vælgeren på Min tid. Derefter godkender økonomi (Økonomi 🔒) — det låser perioden for alle. Hold musen over et flueben for at se hvem der har godkendt og hvornår.</p></div>;
+            return <tr key={x.emp.id}><td>{x.emp.name}</td><td className={"godk" + (a != null && a.leader_approved ? " godk-ok" : "")} title={leaderTitle(x.emp, a)}><input type="checkbox" checked={a != null && !!a.leader_approved} disabled={!canLeaderApprove(x.emp) || a != null && !!a.economy_approved} onChange={V => setLeader(x.emp.id, V.target.checked)} /></td><td className={"godk" + (a != null && a.economy_approved ? " godk-laast" : "")} title={economyTitle(a)}><input type="checkbox" checked={a != null && !!a.economy_approved} disabled={!canEconomyApprove || (a == null || !a.leader_approved) && (a == null || !a.economy_approved)} onChange={V => setEconomy(x.emp.id, V.target.checked)} /></td><CreditCell credit={credits[x.emp.id]} oncall={oncallByEmp[x.emp.id] || 0} editable={canCredit(x.emp, a)} title={canCredit(x.emp, a) ? "Timer der tilskrives ÅTD saldo for perioden (fx afspadsering for vagttelefon). Tom eller 0 = ingen" : a != null && a.economy_approved ? "Perioden er lønkørt" : "Kun lederen i medarbejderens afdeling (eller admin)"} onSave={h => saveCredit(x.emp.id, h)} />{x.cells.map((V, W) => <td className={"mcell " + V.cls} key={W}>{V.c}</td>)}<td className={"num" + (x.mangler ? " error" : "")}>{x.mangler}</td><td className={"num" + (x.delvist ? " warn" : "")}>{x.delvist}</td></tr>;
+          })}</tbody></table></div><p className="muted small"><b>!</b> intet indtastet · <b>~</b> påbegyndt, fordeling mangler · <b>✓</b> alt fordelt ·<b> F</b> ferie · <b>S</b> sygdom · <b>B</b> barn syg · <b>Ø</b> øvrigt fravær</p><p className="muted small"><b>Godkendelse:</b> Afdelingslederen godkender først (Leder ✓), så kan medarbejderen ikke længere rette i perioden, men lederen kan stadig registrere på vegne af medarbejderen via vælgeren på Min tid. Derefter godkender økonomi (Økonomi 🔒) — det låser perioden for alle. Hold musen over et flueben for at se hvem der har godkendt og hvornår.</p><p className="muted small"><b>Tilskrevet:</b> timer lederen tilskriver medarbejderens ÅTD saldo for lønperioden, fx afspadsering på baggrund af vagttelefon (📞 viser periodens vagttelefon-timer). Der sker ingen automatisk omregning; skriv det antal timer, aftalen giver.</p></div>;
 }

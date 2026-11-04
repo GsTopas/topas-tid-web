@@ -30,7 +30,7 @@ export function MinPeriode({ boot }: { boot: Boot }) {
       api.proxyEmployees().then(setEmployees).catch(() => {});
     }
   }, [isLeader]);
-  const [saldo, setSaldo] = useState<{ start: number; kontrol: number } | null>(null);
+  const [saldo, setSaldo] = useState<{ start: number; kontrol: number; tilskrevet: number } | null>(null);
   /** Normugens dagsfordelinger for den valgte medarbejder (dagsnormen følger dem, når ugesummen passer). */
   const [splits, setSplits] = useState<NormSplit[]>([]);
   useEffect(() => {
@@ -44,7 +44,7 @@ export function MinPeriode({ boot }: { boot: Boot }) {
       api.myPeriod(period.start_date, period.end_date, empId).then(setData);
     }
   }, [period, empId]);
-  // ÅTD saldo: Kontrol fra årets første lønperiode til og med den valgte + start saldo.
+  // ÅTD saldo: Kontrol fra årets første lønperiode til og med den valgte + start saldo + tilskrevne timer.
   const yearStart = periods.filter(p => p.year === period?.year).reduce((min, p) => p.start_date < min ? p.start_date : min, period?.start_date ?? "");
   useEffect(() => {
     setSaldo(null);
@@ -202,14 +202,14 @@ export function MinPeriode({ boot }: { boot: Boot }) {
     }, {
       dato: "ÅTD SALDO",
       sted: "",
-      frav: saldo ? <span className="muted small">{`Start saldo ${fmtSigned(saldo.start)} + Kontrol ${fmtSigned(saldo.kontrol)} (${fmtDate(yearStart)} – ${fmtDate(period.end_date)})`}</span> : "",
+      frav: saldo ? <span className="muted small">{`Start saldo ${fmtSigned(saldo.start)} + Kontrol ${fmtSigned(saldo.kontrol)}${saldo.tilskrevet ? ` + Tilskrevet ${fmtSigned(saldo.tilskrevet)}` : ""} (${fmtDate(yearStart)} – ${fmtDate(period.end_date)})`}</span> : "",
       fravt: "",
       ind: "",
       ud: "",
       arb: "",
       vagt: "",
       ford: "",
-      ktrl: <span className="saldo">{saldo ? fmtSigned(saldo.start + saldo.kontrol) : "…"}</span>,
+      ktrl: <span className="saldo">{saldo ? fmtSigned(saldo.start + saldo.kontrol + saldo.tilskrevet) : "…"}</span>,
       note: ""
     }]} />{!simple && Math.abs(sumAllocated - sumWork) > 0.01 && <p className="warn small">⚠ {who} har fordelt {fmtNum(sumAllocated)} af {fmtNum(sumWork)} arbejdstimer på projekter — {isSelf ? "gå til Min tid og fordel resten" : "resten skal fordeles"} på dagene markeret med ⚠.</p>}{!simple && data.comp_sums.length > 0 && <Fragment><h3>{isSelf ? "Mine" : `${selected?.name || "Medarbejderens"}s`} timer pr. projekt/selskab</h3><DataTable cols={[{
         key: "comp",

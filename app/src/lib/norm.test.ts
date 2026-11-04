@@ -23,4 +23,19 @@ describe("dayNorm", () => {
   it("uden fordelinger: kontrakten", () => {
     expect(dayNorm(contract, null, "2026-10-08")).toBe(4);
   });
+  it("normtid med historik: ny normtid gælder kun fra valid_from", () => {
+    const old: NormSplit = { employee_id: 1, valid_from: "1900-01-01", weekly_norm: [7, 7, 7, 7, 7, 0, 0], contract: true };
+    const nov: NormSplit = { employee_id: 1, valid_from: "2026-10-26", weekly_norm: [6.5, 6.5, 6.5, 6.5, 6, 0, 0], contract: true };
+    const contractNow = nov.weekly_norm;
+    expect(dayNorm(contractNow, [old, nov], "2026-10-23")).toBe(7); // fredag før
+    expect(dayNorm(contractNow, [old, nov], "2026-10-30")).toBe(6); // fredag efter
+    expect(dayNorm(contractNow, [old, nov], "2026-10-26")).toBe(6.5);
+  });
+  it("normugen gælder kun mens dens ugesum passer til normtiden på dagen", () => {
+    const old: NormSplit = { employee_id: 1, valid_from: "1900-01-01", weekly_norm: [7, 7, 7, 7, 7, 0, 0], contract: true };
+    const nov: NormSplit = { employee_id: 1, valid_from: "2026-10-26", weekly_norm: [6.5, 6.5, 6.5, 6.5, 6, 0, 0], contract: true };
+    const split: NormSplit = { employee_id: 1, valid_from: "2026-09-28", weekly_norm: [7.5, 7, 7, 7.25, 6.25, 0, 0] };
+    expect(dayNorm(nov.weekly_norm, [old, nov, split], "2026-10-19")).toBe(7.5); // mandag i oktober: normugen (35 t)
+    expect(dayNorm(nov.weekly_norm, [old, nov, split], "2026-10-26")).toBe(6.5); // mandag i november: ny normtid (32 t)
+  });
 });
