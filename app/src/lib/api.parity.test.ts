@@ -91,6 +91,18 @@ describe("rebuilt api.ts matches the original bundle", () => {
     }
     expect(parts.reduce((s, p) => s + p.total.fakt_t, 0)).toBeCloseTo(all.total.fakt_t, 2);
   });
+  it("ecoBilling minus / kun ét selskab (fx TEG) splits the totals by registered company", async () => {
+    const all = await api.ecoBilling("2026-07-27", "2026-12-31");
+    const kun = await api.ecoBilling("2026-07-27", "2026-12-31", null, { companyId: 11, mode: "only" });
+    const minus = await api.ecoBilling("2026-07-27", "2026-12-31", null, { companyId: 11, mode: "exclude" });
+    expect(kun.total.reg_t).toBeGreaterThan(0);
+    expect(minus.total.reg_t).toBeGreaterThan(0);
+    expect(Object.keys(kun.invoice)).toEqual(["Disko Line"]);
+    for (const k of ["drift", "projektLoebende", "projektSamlet"] as const) {
+      expect(kun.kategorier[k].t + minus.kategorier[k].t).toBeCloseTo(all.kategorier[k].t, 2);
+    }
+    expect(kun.total.fakt_t + minus.total.fakt_t).toBeCloseTo(all.total.fakt_t, 2);
+  });
   it("ecoAbsence (holiday year from 1 Sep)", async () => {
     expect(await api.ecoAbsence("2026-08-24", "2026-09-27")).toEqual(await original.at.ecoAbsence("2026-08-24", "2026-09-27"));
     expect(await api.ecoAbsence("2026-07-27", "2026-08-23")).toEqual(await original.at.ecoAbsence("2026-07-27", "2026-08-23"));
