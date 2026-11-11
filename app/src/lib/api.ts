@@ -257,7 +257,6 @@ interface BillingEmployeeRow {
   name: string;
   hourly_rate: number | null;
   department: string | null;
-  employer_company_id?: number | null;
 }
 
 export interface HoursKr {
@@ -976,10 +975,16 @@ export const api = {
    * afdeling i Medarbejdere) tælles med, også i projektøkonomien. Uden dept: som originalen.
    */
   /**
-   * dept: kun timer fra medarbejdere i afdelingen. employer: kun timer fra medarbejdere
-   * ansat i selskabet (employees.employer_company_id), "none" = uden "Ansat i".
+   * dept: kun timer fra medarbejdere i afdelingen.
+   * scope: kun timer registreret på selskabet (only) eller alle andre end det (exclude),
+   * fx "Alle afdelinger minus TEG" / "kun TEG" i Fakturering.
    */
-  async ecoBilling(from: string, to: string, dept?: string | null, employer?: number | "none" | null): Promise<EcoBillingResult> {
+  async ecoBilling(
+    from: string,
+    to: string,
+    dept?: string | null,
+    scope?: { companyId: number; mode: "only" | "exclude" } | null,
+  ): Promise<EcoBillingResult> {
     const [allAllocs, rules, companies, employees] = await Promise.all([
       fetchAll<BillingAllocRow>(() =>
         supabase
@@ -991,17 +996,14 @@ export const api = {
       ),
       q<BillingRuleRow>(supabase.from("billing_rules").select("source_company_id, target_company_id, share").eq("active", true)),
       q<BillingCompanyRow>(supabase.from("companies").select("id, name, kind, billing_type, expected_settlement")),
-      q<BillingEmployeeRow>(supabase.from("employees").select("id, name, hourly_rate, department, employer_company_id")),
+      q<BillingEmployeeRow>(supabase.from("employees").select("id, name, hourly_rate, department")),
     ]);
     const companyById: Record<string, BillingCompanyRow> = Object.fromEntries(companies.map((c) => [c.id, c]));
     const employeeById: Record<string, BillingEmployeeRow> = Object.fromEntries(employees.map((e) => [e.id, e]));
     const inDept = (a: { employee_id: number }) => !dept || (employeeById[a.employee_id]?.department || "") === dept;
-    const inEmployer = (a: { employee_id: number }) => {
-      if (employer == null) return true;
-      const id = employeeById[a.employee_id]?.employer_company_id ?? null;
-      return employer === "none" ? id == null : id === employer;
-    };
-    const allocs = allAllocs.filter((a) => inDept(a) && inEmployer(a));
+    const inScope = (a: { company_id: number }) =>
+      !scope || (scope.mode === "only" ? a.company_id === scope.companyId : a.company_id !== scope.companyId);
+    const allocs = allAllocs.filter((a) => inDept(a) && inScope(a));
     const samletIds = new Set(companies.filter((c) => c.kind === "projekt" && c.billing_type === "samlet").map((c) => c.id));
     const billable = allocs.filter((a) => !samletIds.has(a.company_id));
 
@@ -1194,7 +1196,7 @@ export const api = {
       );
       type ProjectAcc = { t: number; kr: number; lines: Record<string, EmpTaskLine>; mdr: Record<string, HoursKr> };
       const byProject: Record<string, ProjectAcc> = {};
-      for (const a of projectAllocs.filter((a) => inDept(a) && inEmployer(a))) {
+      for (const a of projectAllocs.filter((a) => inDept(a) && inScope(a))) {
         const emp: Partial<BillingEmployeeRow> = employeeById[a.employee_id] || {};
         const rate = Number(emp.hourly_rate || 0);
         const hours = Number(a.hours);

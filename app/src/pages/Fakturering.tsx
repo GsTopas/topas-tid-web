@@ -9,7 +9,10 @@ import { ProjectEconomyView } from "../components/ProjectEconomyView";
 import { DEPARTMENTS } from "./settings/shared";
 
 type Billing = Awaited<ReturnType<typeof api.ecoBilling>>;
-type Company = Awaited<ReturnType<typeof api.companiesAll>>[number];
+
+const TEG = "TEG";
+const MINUS_TEG = "__minus_teg";
+const KUN_TEG = "__kun_teg";
 
 type Props = { flash?: (msg: string) => void };
 
@@ -17,22 +20,25 @@ export function Fakturering({ flash }: Props) {
   const [periods, selIds, setSelIds, sel, reloadPeriods] = useMultiPeriod();
   const [data, setData] = useState<Billing | null>(null);
   const [valgtProjekt, setValgtProjekt] = useState("");
-  // Afdelingsfilter: "" = alle afdelinger
-  const [afd, setAfd] = useState("");
-  // Ansat i-filter (employees.employer_company_id): "" = alle, "none" = ikke angivet, ellers selskabets id
-  const [ansatI, setAnsatI] = useState("");
-  const [selskaber, setSelskaber] = useState<Company[]>([]);
+  // Afdelingsfilter: "" = alle afdelinger, ellers en afdeling eller et af TEG-valgene herunder
+  const [afdValg, setAfdValg] = useState("");
+  // "Alle afdelinger minus TEG" / "kun TEG": timer registreret på selskabet TEG (Timefordeling)
+  const [tegId, setTegId] = useState<number | null>(null);
 
   useEffect(() => {
-    api.companiesAll().then(cs => setSelskaber(cs.filter(c => c.kind === "selskab"))).catch(() => {});
+    api.companiesAll().then(cs => setTegId(cs.find(c => c.kind === "selskab" && c.name === TEG)?.id ?? null)).catch(() => {});
   }, []);
+
+  const tegValg = afdValg === MINUS_TEG || afdValg === KUN_TEG;
+  const afd = tegValg ? "" : afdValg;
+  const scope = tegValg && tegId != null ? { companyId: tegId, mode: afdValg === KUN_TEG ? "only" as const : "exclude" as const } : null;
 
   useEffect(() => {
     if (!sel) {
       return;
     }
     let cancelled = false;
-    api.ecoBilling(sel.start_date, sel.end_date, afd || null, ansatI === "" ? null : ansatI === "none" ? "none" : Number(ansatI)).then(res => {
+    api.ecoBilling(sel.start_date, sel.end_date, afd || null, scope).then(res => {
       if (!cancelled) {
         setData(res);
       }
@@ -44,15 +50,15 @@ export function Fakturering({ flash }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [sel?.start_date, sel?.end_date, afd, ansatI]);
+  }, [sel?.start_date, sel?.end_date, afdValg, tegId]);
 
-  if (!sel || !data) {
+  if (!sel || !data || (tegValg && tegId == null)) {
     return <p className="muted">Henter…</p>;
   }
 
   const projektNavne = new Set(data.projekter.map(p => p.comp));
   // Med afdelingsfilter vises kun projekter, afdelingen har timer på
-  const filtreret = !!afd || ansatI !== "";
+  const filtreret = afd !== "" || tegValg;
   const projekter = filtreret ? data.projekter.filter(p => p.t > 0.005) : data.projekter;
   // Afslutningsprojekter: sorteret efter forventet afregningsdato (uden dato sidst), derefter beløb faldende
   const samlede = projekter.filter(p => p.billing === "samlet").sort((a, b) => (a.expected || "9999").localeCompare(b.expected || "9999") || b.kr - a.kr);
@@ -60,11 +66,10 @@ export function Fakturering({ flash }: Props) {
   const selskabsModtagere = modtagere.filter(m => !projektNavne.has(m));
   const projektModtagere = modtagere.filter(m => projektNavne.has(m));
   const projekt = data.projekter.find(p => p.comp === valgtProjekt) || null;
-  const ansatNavn = ansatI === "" ? "" : ansatI === "none" ? "ikke angivet" : selskaber.find(c => String(c.id) === ansatI)?.name || `#${ansatI}`;
-  const afdTekst = (afd ? ` · Afdeling: ${afd}` : "") + (ansatNavn ? ` · Ansat i: ${ansatNavn}` : "");
-  const slug = (t: string) => `_${t.toLowerCase().replace(/[^a-zæøå0-9]+/g, "_")}`;
+  const valgNavn = afdValg === MINUS_TEG ? "Alle afdelinger minus TEG" : afdValg === KUN_TEG ? "Alle afdelinger, kun TEG" : afd;
+  const afdTekst = valgNavn ? ` · ${tegValg ? valgNavn : `Afdeling: ${afd}`}` : "";
   const periodeTekst = (sel.enkelt ? `Periode: ${sel.month_name} ${sel.year} (${fmtDate(sel.start_date)} – ${fmtDate(sel.end_date)})` : `Perioder: ${sel.month_name} ${sel.year} (${fmtDate(sel.start_date)} – ${fmtDate(sel.end_date)})`) + afdTekst;
-  const filSuffix = (sel.enkelt ? `${sel.month_name.toLowerCase()}_${sel.year}` : `${sel.start_date}_til_${sel.end_date}`) + (afd ? slug(afd) : "") + (ansatNavn ? slug("ansat_" + ansatNavn) : "");
+  const filSuffix = (sel.enkelt ? `${sel.month_name.toLowerCase()}_${sel.year}` : `${sel.start_date}_til_${sel.end_date}`) + (valgNavn ? `_${valgNavn.toLowerCase().replace(/[^a-zæøå0-9]+/g, "_")}` : "");
 
   // Pr. afdeling og modtager (kr til fakturering nu), bygget af fakturalinjerne
   const afdKr: Record<string, Record<string, number>> = {};
@@ -145,7 +150,7 @@ export function Fakturering({ flash }: Props) {
 
   return <div><div className="pagehead"><h2>💰 Fakturering</h2><div className="row" style={{
         margin: 0
-      }}><select value={afd} onChange={e => setAfd(e.target.value)} title="Vis kun timer registreret af medarbejdere i afdelingen"><option value="">Alle afdelinger</option>{DEPARTMENTS.map(d => <option key={d}>{d}</option>)}</select><select value={ansatI} onChange={e => setAnsatI(e.target.value)} title="Vis kun timer fra medarbejdere ansat i selskabet (Ansat i, Settings → Medarbejdere) — fx for at fakturere fra Topas og TEG hver for sig"><option value="">Ansat i: alle selskaber</option>{selskaber.filter(c => c.active || String(c.id) === ansatI).map(c => <option key={c.id} value={String(c.id)}>Ansat i: {c.name}</option>)}<option value="none">Ansat i: ikke angivet</option></select><MultiPeriodPicker periods={periods} selIds={selIds} onChange={setSelIds} /><button className={sel.enkelt?.locked ? "ghost" : "primary"} disabled={!sel.enkelt} title={sel.enkelt ? "" : "Vælg én enkelt periode for at kunne låse den"} onClick={toggleLock}>{sel.enkelt?.locked ? "🔓 Åbn periode" : "🔒 Lås periode"}</button></div></div><div className="kpis"><div className="kpi"><span>Selskabs-drift-timer</span><strong>{fmtNum(kat.drift.t)} t</strong><em>{fmtKr(kat.drift.kr)} kr</em></div><div className="kpi"><span>Projekt-drift-timer (løbende)</span><strong>{fmtNum(kat.projektLoebende.t)} t</strong><em>{fmtKr(kat.projektLoebende.kr)} kr</em></div><div className="kpi"><span>Projekt-timer til samlet afregning</span><strong>{fmtNum(kat.projektSamlet.t)} t</strong><em>{fmtKr(kat.projektSamlet.kr)} kr</em></div></div>{filtreret && <p className="muted small">Viser kun timer registreret af medarbejdere{afd && <> i <b>{afd}</b></>}{ansatNavn && <>{afd ? " og" : ""} ansat i <b>{ansatNavn}</b></>} (Settings → Medarbejdere). Fordelingsnøgler gælder som normalt. Vælg "Alle afdelinger" og "Ansat i: alle selskaber" for at se det hele.</p>}{!afd && afdKolonner.length > 0 && <details className="fakt"><summary><strong>🏷️ Pr. afdeling — hvem har faktureret til hvem?</strong><span className="muted"> — kr til fakturering nu, efter fordelingsnøgler</span></summary><DataTable cols={[{
+      }}><select value={afdValg} onChange={e => setAfdValg(e.target.value)} title="Vis kun timer registreret af medarbejdere i afdelingen, eller alle afdelingers timer med eller uden timer registreret på TEG"><option value="">Alle afdelinger</option>{tegId != null && <><option value={MINUS_TEG}>Alle afdelinger minus TEG</option><option value={KUN_TEG}>Alle afdelinger, kun TEG</option></>}{DEPARTMENTS.map(d => <option key={d}>{d}</option>)}</select><MultiPeriodPicker periods={periods} selIds={selIds} onChange={setSelIds} /><button className={sel.enkelt?.locked ? "ghost" : "primary"} disabled={!sel.enkelt} title={sel.enkelt ? "" : "Vælg én enkelt periode for at kunne låse den"} onClick={toggleLock}>{sel.enkelt?.locked ? "🔓 Åbn periode" : "🔒 Lås periode"}</button></div></div><div className="kpis"><div className="kpi"><span>Selskabs-drift-timer</span><strong>{fmtNum(kat.drift.t)} t</strong><em>{fmtKr(kat.drift.kr)} kr</em></div><div className="kpi"><span>Projekt-drift-timer (løbende)</span><strong>{fmtNum(kat.projektLoebende.t)} t</strong><em>{fmtKr(kat.projektLoebende.kr)} kr</em></div><div className="kpi"><span>Projekt-timer til samlet afregning</span><strong>{fmtNum(kat.projektSamlet.t)} t</strong><em>{fmtKr(kat.projektSamlet.kr)} kr</em></div></div>{tegValg && <p className="muted small">{afdValg === MINUS_TEG ? <>Viser alle afdelingers timer <b>undtagen</b> timer registreret på selskabet TEG i Timefordeling.</> : <>Viser kun timer registreret på selskabet <b>TEG</b> i Timefordeling, fra alle afdelinger.</>} Projekttimer, som fordelingsnøgler sender videre til TEG, tæller ikke som TEG-timer. Vælg "Alle afdelinger" for at se det hele.</p>}{afd && <p className="muted small">Viser kun timer registreret af medarbejdere i <b>{afd}</b> (afdelingen i Settings → Medarbejdere). Fordelingsnøgler gælder som normalt. Vælg "Alle afdelinger" for at se det hele.</p>}{!afd && afdKolonner.length > 0 && <details className="fakt"><summary><strong>🏷️ Pr. afdeling — hvem har faktureret til hvem?</strong><span className="muted"> — kr til fakturering nu, efter fordelingsnøgler</span></summary><DataTable cols={[{
       key: "til",
       label: "Faktureres til"
     }, ...afdKolonner.map(d => ({
