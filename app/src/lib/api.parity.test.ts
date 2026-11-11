@@ -7,9 +7,9 @@ import { makeOriginal } from "../../test/original/data-layer.js";
 
 const tables: Tables = {
   employees: [
-    { id: 1, name: "Anne A", department: "Marketing", weekly_norm: [7.5, 7.5, 7.5, 7.5, 7, 0, 0], is_admin: false, is_manager: false, hired_date: null, hourly_rate: 500, payroll_number: 10001, active: true, auth_user_id: "u1" },
-    { id: 2, name: "Bo B", department: "Digital Transformation", weekly_norm: [7.5, 7.5, 7.5, 7.5, 7, 0, 0], is_admin: true, is_manager: true, hired_date: "2026-08-01", hourly_rate: 850, payroll_number: 10002, active: true, auth_user_id: "u2" },
-    { id: 3, name: "Cia C", department: "Økonomi", weekly_norm: [6, 6, 6, 6, 6, 0, 0], is_admin: false, is_manager: true, hired_date: null, hourly_rate: "100", payroll_number: null, active: true, auth_user_id: "u3" },
+    { id: 1, name: "Anne A", department: "Marketing", weekly_norm: [7.5, 7.5, 7.5, 7.5, 7, 0, 0], is_admin: false, is_manager: false, hired_date: null, hourly_rate: 500, payroll_number: 10001, active: true, auth_user_id: "u1", employer_company_id: 10 },
+    { id: 2, name: "Bo B", department: "Digital Transformation", weekly_norm: [7.5, 7.5, 7.5, 7.5, 7, 0, 0], is_admin: true, is_manager: true, hired_date: "2026-08-01", hourly_rate: 850, payroll_number: 10002, active: true, auth_user_id: "u2", employer_company_id: 12 },
+    { id: 3, name: "Cia C", department: "Økonomi", weekly_norm: [6, 6, 6, 6, 6, 0, 0], is_admin: false, is_manager: true, hired_date: null, hourly_rate: "100", payroll_number: null, active: true, auth_user_id: "u3", employer_company_id: 12 },
     { id: 4, name: "Dan D", department: "Marketing", weekly_norm: [7.5, 7.5, 7.5, 7.5, 7, 0, 0], is_admin: false, is_manager: false, hired_date: null, hourly_rate: 0, payroll_number: null, active: true, auth_user_id: null },
   ],
   companies: [
@@ -90,6 +90,19 @@ describe("rebuilt api.ts matches the original bundle", () => {
       expect(parts.reduce((s, p) => s + p.kategorier[k].t, 0)).toBeCloseTo(all.kategorier[k].t, 2);
     }
     expect(parts.reduce((s, p) => s + p.total.fakt_t, 0)).toBeCloseTo(all.total.fakt_t, 2);
+  });
+  it("ecoBilling with Ansat i filter splits the totals by employing company", async () => {
+    const all = await api.ecoBilling("2026-07-27", "2026-12-31");
+    const parts = await Promise.all([10, 12, "none" as const].map(e => api.ecoBilling("2026-07-27", "2026-12-31", null, e)));
+    expect(parts.filter(p => p.total.fakt_t > 0)).toHaveLength(3);
+    expect(Object.values(parts[0].invoice).flat().every(l => l.emp === "Anne A")).toBe(true);
+    expect(Object.values(parts[2].invoice).flat().every(l => l.emp === "Dan D")).toBe(true);
+    for (const k of ["drift", "projektLoebende", "projektSamlet"] as const) {
+      expect(parts.reduce((s, p) => s + p.kategorier[k].t, 0)).toBeCloseTo(all.kategorier[k].t, 2);
+    }
+    expect(parts.reduce((s, p) => s + p.total.fakt_t, 0)).toBeCloseTo(all.total.fakt_t, 2);
+    const both = await api.ecoBilling("2026-07-27", "2026-12-31", "Marketing", 10);
+    expect(Object.values(both.invoice).flat().every(l => l.emp === "Anne A")).toBe(true);
   });
   it("ecoAbsence (holiday year from 1 Sep)", async () => {
     expect(await api.ecoAbsence("2026-08-24", "2026-09-27")).toEqual(await original.at.ecoAbsence("2026-08-24", "2026-09-27"));
