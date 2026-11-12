@@ -1,9 +1,9 @@
 import { HALF_HOLIDAY } from "../../lib/ferie";
 
 /** Kode 50 med fritekst i stedet for de faste valg. Kan kun vælges af admins (Gorm, 12.11.2026). */
-export const FIRM_PAID_FREE_TEXT = "Andet firma betalt fravær";
+export const FIRM_PAID_FREE_TEXT = "Andet – firmabetalt (fritekst)";
 
-/** Gemmes i absence_choice, så "Andet firma betalt fravær" kan kendes fra "Andet – firmabetalt" (begge kode 50). */
+/** Gemmes i absence_choice, så "Andet – firmabetalt (fritekst)" kan kendes fra "Andet – firmabetalt" (begge kode 50). */
 export const FREE_TEXT_CHOICE = "Fritekst";
 
 /**

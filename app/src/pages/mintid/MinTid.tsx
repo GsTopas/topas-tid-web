@@ -76,7 +76,7 @@ export function MinTid({ mt, period, boot, setBoot, emp, periods, flash }: Props
       work_date: date,
       day_type: toDbDayType(h.day_type),
       location_note: h.location_note || null,
-      // Fritekstfeltet vises kun ved flexfri (kode 51) og "Andet firma betalt fravær". Gem det ikke ved andre typer,
+      // Fritekstfeltet vises kun ved flexfri (kode 51) og "Andet – firmabetalt (fritekst)". Gem det ikke ved andre typer,
       // ellers bliver en gammel tekst hængende usynligt på dagen (fx efter skift til ½ feriedag).
       absence_note: FREE_TEXT_TYPES.includes(absType) && h.absence_note || null,
       extra_abs: isWorkDay && h.extra_abs ? toDbDayType(h.extra_abs) : null,
