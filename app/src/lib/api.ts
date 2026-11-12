@@ -23,6 +23,8 @@ export interface EmployeeSelfRow {
   /** Kan leder-godkende medarbejdere i alle afdelinger. */
   approves_all_departments: boolean;
   hired_date: string | null;
+  /** Opgavestyring: skriver ned, hvad de har arbejdet med (Timefordeling). Uden = enkel visning. */
+  task_tracking: boolean;
 }
 
 export type SessionEmployee = EmployeeSelfRow & {
@@ -209,6 +211,8 @@ export interface MatrixEmployee {
   department: string | null;
   weekly_norm: WeeklyNorm;
   hired_date: string | null;
+  /** Opgavestyring: skriver ned, hvad de har arbejdet med (Timefordeling). Uden = enkel visning. */
+  task_tracking: boolean;
 }
 
 export interface MatrixEntry {
@@ -390,6 +394,8 @@ export interface EmployeeAdminRow {
   is_manager: boolean;
   /** Kan leder-godkende medarbejdere i alle afdelinger. */
   approves_all_departments: boolean;
+  /** Opgavestyring: skriver ned, hvad de har arbejdet med (Timefordeling). Uden = enkel visning. */
+  task_tracking: boolean;
   active: boolean;
   hourly_rate: number | null;
   hired_date: string | null;
@@ -488,6 +494,8 @@ export interface ProxyEmployee {
   department: string | null;
   weekly_norm: WeeklyNorm;
   hired_date: string | null;
+  /** Opgavestyring: skriver ned, hvad de har arbejdet med (Timefordeling). Uden = enkel visning. */
+  task_tracking: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -544,7 +552,7 @@ export async function currentEmployee(): Promise<SessionEmployee | null> {
   const rows = await q<EmployeeSelfRow>(
     supabase
       .from("employees")
-      .select("id, name, department, weekly_norm, is_admin, is_manager, approves_all_departments, hired_date")
+      .select("id, name, department, weekly_norm, is_admin, is_manager, approves_all_departments, hired_date, task_tracking")
       .eq("auth_user_id", user.id)
       .eq("active", true),
   );
@@ -927,7 +935,7 @@ export const api = {
   ): Promise<{ employees: MatrixEmployee[]; entries: MatrixEntry[]; alloc_sums: MatrixAllocSum[]; today: string }> {
     const [employees, entries, allocs] = await Promise.all([
       q<MatrixEmployee>(
-        supabase.from("employees").select("id, name, department, weekly_norm, hired_date").eq("active", true).order("name"),
+        supabase.from("employees").select("id, name, department, weekly_norm, hired_date, task_tracking").eq("active", true).order("name"),
       ),
       q<MatrixEntry>(
         supabase
@@ -1328,7 +1336,7 @@ export const api = {
       supabase
         .from("employees")
         .select(
-          "id, name, email, department, employer_company_id, is_admin, is_manager, approves_all_departments, active, hourly_rate, hired_date, payroll_number, weekly_norm, flex_start, auth_user_id",
+          "id, name, email, department, employer_company_id, is_admin, is_manager, approves_all_departments, task_tracking, active, hourly_rate, hired_date, payroll_number, weekly_norm, flex_start, auth_user_id",
         )
         .order("name"),
     ),
@@ -1613,7 +1621,7 @@ export const api = {
   },
 
   proxyEmployees: (): Promise<ProxyEmployee[]> =>
-    q<ProxyEmployee>(supabase.from("employees").select("id, name, department, weekly_norm, hired_date").eq("active", true).order("name")),
+    q<ProxyEmployee>(supabase.from("employees").select("id, name, department, weekly_norm, hired_date, task_tracking").eq("active", true).order("name")),
 
   /** Kalder edge function "onboard" (opret/nulstil login). */
   async manageLogin(action: string, email: string, password?: string): Promise<unknown> {

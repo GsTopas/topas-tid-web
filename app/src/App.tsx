@@ -12,7 +12,7 @@ import { confirmDiscard } from "./pages/settings/shared";
 import { MinTid } from "./pages/mintid/MinTid";
 import { useMinTid } from "./pages/mintid/useMinTid";
 import { openedFromRecoveryLink } from "./lib/supabase";
-import { isSimpleDepartment } from "./lib/departments";
+import { hasTaskTracking } from "./lib/departments";
 
 /** Initialer til avataren (op til to ord). */
 const initials = (name: string | null | undefined): string => (name || "?").split(" ").filter(Boolean).slice(0, 2).map(w => w[0]).join("").toUpperCase();
@@ -111,9 +111,9 @@ export function App() {
     return <div className="page"><p>Ingen aktiv lønperiode.</p></div>;
   }
   const isLeader = emp.is_admin || emp.is_manager;
-  // Enkel visning (fx Topas Travel): ingen fordeling på selskaber/projekter, så Afdelings indsigt og
+  // Enkel visning (medarbejder uden opgavestyring, fx Topas Travel): ingen fordeling på selskaber/projekter, så Afdelings indsigt og
   // lederens Settings (selskaber, projekter, opgavetyper, timepuljer) har intet at vise dem.
-  const simple = isSimpleDepartment(emp.department) && !emp.can_economy;
+  const simple = !hasTaskTracking(emp) && !emp.can_economy;
   const tabs: [Tab, string][] = [["tid", "⏱️ Min tid"], ["periode", isLeader ? "📅 Medarbejder pr. periode" : "📅 Min periode"], ...(simple ? [] : [["afdeling", "👥 Afdelings indsigt"]] as [Tab, string][]), ...(emp.can_economy || emp.is_manager ? [["okonomi", "📋 Afdelings overblik"]] as [Tab, string][] : []), ...(emp.can_economy ? [["fakturering", "💰 Fakturering"], ["fravaer", "🏖️ Fravær & løn"]] as [Tab, string][] : []), ...(isLeader && !simple ? [["admin", "⚙️ Settings"]] as [Tab, string][] : [])];
   return <div className="page">{newVersion && <div className="nyversion" role="status"><span>🔄 Der er en ny version af Topas Tid klar.</span><button className="primary" onClick={() => location.reload()}>Opdatér nu</button></div>}<header><div className="brand"><div className="logo">⏱️</div><h1>Topas Tid <span className="badge">Beta</span></h1></div><div className="user"><span>{emp.name}</span><div className="avatar">{initials(emp.name)}</div><button className="linkbtn" onClick={() => setChangingPassword(true)}>Skift password</button><button className="linkbtn" onClick={() => {
           if (mt.unsaved && !window.confirm("Du har ikke gemt din dag. Vil du logge ud uden at gemme?")) {

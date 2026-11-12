@@ -2,7 +2,7 @@ import { Fragment, useEffect, useState } from "react";
 import { api, type Boot } from "../lib/api";
 import { fmtDate, fmtNum, weekdayIdx } from "../lib/format";
 import { dayNorm, type NormSplit } from "../lib/norm";
-import { hasOncall, isSimpleDepartment } from "../lib/departments";
+import { hasOncall, hasTaskTracking } from "../lib/departments";
 import { oncallHours } from "../lib/saldo";
 import { absenceLabel } from "./mintid/constants";
 
@@ -61,8 +61,8 @@ export function MinPeriode({ boot }: { boot: Boot }) {
   const normFor = (iso: string) => dayNorm(norm, splits, iso);
   const isSelf = empId === me?.id;
   const who = isSelf ? "Du" : selected?.name || "Medarbejderen";
-  /** Enkel visning (fx Topas Travel): ingen fordeling på projekter, så kolonnen "Fordelt" udelades. */
-  const simple = isSimpleDepartment(isSelf ? me?.department : selected?.department);
+  /** Enkel visning (uden opgavestyring, fx Topas Travel): ingen fordeling på projekter, så kolonnen "Fordelt" udelades. */
+  const simple = !hasTaskTracking(isSelf ? me : selected);
   /** Kolonnen "Vagttelefon": for afdelinger med vagttelefon, eller når perioden har vagttelefon-timer. */
   const showOncall = hasOncall(isSelf ? me?.department : selected?.department) || data.entries.some(e => oncallHours(e) > 0);
   const rows: Row[] = [];
