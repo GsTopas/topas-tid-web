@@ -432,6 +432,14 @@ export interface TaskTypeRow {
   name: string;
   active: boolean;
   sort: number;
+  /** Fordelingskategori (lib/fordelingskategori.ts); null = ingen. */
+  distribution_category: string | null;
+}
+
+export interface TaskTypeCategoryRow {
+  department: string;
+  name: string;
+  distribution_category: string | null;
 }
 
 export type TaskTypeInput = Partial<Omit<TaskTypeRow, "id">> & { department?: string };
@@ -1377,13 +1385,26 @@ export const api = {
 
   taskTypesFor: (department: string): Promise<TaskTypeRow[]> =>
     q<TaskTypeRow>(
-      supabase.from("task_types").select("id, name, active, sort").eq("department", department).order("sort").order("name"),
+      supabase.from("task_types").select("id, name, active, sort, distribution_category").eq("department", department).order("sort").order("name"),
+    ),
+
+  /** Fordelingskategori for alle afdelingers opgavetyper (til kolonnen i Fakturering). */
+  taskTypeCategories: (): Promise<TaskTypeCategoryRow[]> =>
+    q<TaskTypeCategoryRow>(
+      supabase.from("task_types").select("department, name, distribution_category").not("distribution_category", "is", null),
     ),
 
   /** Ændring går via RPC'en `save_task_type`, så et nyt navn også følger med på eksisterende timelinjer. */
   async saveTaskType(id: number | null | undefined, data: TaskTypeInput): Promise<void> {
     const { error } = id
-      ? await supabase.rpc("save_task_type", { p_id: id, p_name: data.name ?? "", p_sort: data.sort ?? 0, p_active: data.active ?? true })
+      ? await supabase.rpc("save_task_type", {
+          p_id: id,
+          p_name: data.name ?? "",
+          p_sort: data.sort ?? 0,
+          p_active: data.active ?? true,
+          // null = behold, "" = ingen kategori
+          p_category: data.distribution_category === undefined ? null : data.distribution_category ?? "",
+        })
       : await supabase.from("task_types").insert(data);
     if (error) {
       raise(error);

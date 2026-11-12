@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, type SessionEmployee } from "../../lib/api";
+import { FORDELINGSKATEGORIER } from "../../lib/fordelingskategori";
 import { DEPARTMENTS, SaveAllBar, confirmDiscard, keepDirty, saveDirtyRows, useDirtyRows } from "./shared";
 
 type TaskType = Awaited<ReturnType<typeof api.taskTypesFor>>[number];
@@ -44,7 +45,8 @@ export function Opgavetyper({
     const failed = await saveDirtyRows(rows, edits.dirty, g => api.saveTaskType(g.id, {
       name: g.name.trim(),
       sort: Number(g.sort) || 0,
-      active: g.active
+      active: g.active,
+      distribution_category: g.distribution_category || null
     }), flash);
     edits.reset(failed);
     setSaving(false);
@@ -55,9 +57,11 @@ export function Opgavetyper({
     edits.reset();
     api.taskTypesFor(dept).then(list => setRows(list as TaskTypeRow[]));
   };
-  return <div>{ownDeptOnly ? <p className="muted small">Opgavetyper for din afdeling: <b>{dept}</b></p> : <select value={dept} onChange={g => confirmDiscard() && setDept(g.target.value)}>{DEPARTMENTS.map(g => <option key={g}>{g}</option>)}</select>}<table className="datatable admin slim"><thead><tr><th>Opgavetype</th><th className="num">Sortering</th><th>Aktiv</th></tr></thead><tbody>{rows.map(g => <tr className={g.active ? "" : "inaktiv"} key={g.id}><td><input value={g.name} onChange={d => patch(g.id, {
+  return <div>{ownDeptOnly ? <p className="muted small">Opgavetyper for din afdeling: <b>{dept}</b></p> : <select value={dept} onChange={g => confirmDiscard() && setDept(g.target.value)}>{DEPARTMENTS.map(g => <option key={g}>{g}</option>)}</select>}<table className="datatable admin slim"><thead><tr><th>Opgavetype</th><th>Fordelingskategori</th><th className="num">Sortering</th><th>Aktiv</th></tr></thead><tbody>{rows.map(g => <tr className={g.active ? "" : "inaktiv"} key={g.id}><td><input value={g.name} onChange={d => patch(g.id, {
               name: d.target.value
-            })} /></td><td><input className="hours" value={g.sort} onChange={d => patch(g.id, {
+            })} /></td><td><select value={g.distribution_category || ""} onChange={d => patch(g.id, {
+              distribution_category: d.target.value || null
+            })}><option value="">—</option>{FORDELINGSKATEGORIER.map(k => <option key={k}>{k}</option>)}{g.distribution_category && !(FORDELINGSKATEGORIER as readonly string[]).includes(g.distribution_category) && <option>{g.distribution_category}</option>}</select></td><td><input className="hours" value={g.sort} onChange={d => patch(g.id, {
               sort: d.target.value
             })} /></td><td><input type="checkbox" checked={g.active} onChange={d => patch(g.id, {
               active: d.target.checked
