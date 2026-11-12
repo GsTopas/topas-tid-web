@@ -974,17 +974,7 @@ export const api = {
    * dept (afdelingsfilter): kun timer registreret af medarbejdere i den afdeling (deres nuværende
    * afdeling i Medarbejdere) tælles med, også i projektøkonomien. Uden dept: som originalen.
    */
-  /**
-   * dept: kun timer fra medarbejdere i afdelingen.
-   * scope: kun timer registreret på selskabet (only) eller alle andre end det (exclude),
-   * fx "Alle afdelinger minus TEG" / "kun TEG" i Fakturering.
-   */
-  async ecoBilling(
-    from: string,
-    to: string,
-    dept?: string | null,
-    scope?: { companyId: number; mode: "only" | "exclude" } | null,
-  ): Promise<EcoBillingResult> {
+  async ecoBilling(from: string, to: string, dept?: string | null): Promise<EcoBillingResult> {
     const [allAllocs, rules, companies, employees] = await Promise.all([
       fetchAll<BillingAllocRow>(() =>
         supabase
@@ -1001,9 +991,7 @@ export const api = {
     const companyById: Record<string, BillingCompanyRow> = Object.fromEntries(companies.map((c) => [c.id, c]));
     const employeeById: Record<string, BillingEmployeeRow> = Object.fromEntries(employees.map((e) => [e.id, e]));
     const inDept = (a: { employee_id: number }) => !dept || (employeeById[a.employee_id]?.department || "") === dept;
-    const inScope = (a: { company_id: number }) =>
-      !scope || (scope.mode === "only" ? a.company_id === scope.companyId : a.company_id !== scope.companyId);
-    const allocs = allAllocs.filter((a) => inDept(a) && inScope(a));
+    const allocs = allAllocs.filter(inDept);
     const samletIds = new Set(companies.filter((c) => c.kind === "projekt" && c.billing_type === "samlet").map((c) => c.id));
     const billable = allocs.filter((a) => !samletIds.has(a.company_id));
 
@@ -1196,7 +1184,7 @@ export const api = {
       );
       type ProjectAcc = { t: number; kr: number; lines: Record<string, EmpTaskLine>; mdr: Record<string, HoursKr> };
       const byProject: Record<string, ProjectAcc> = {};
-      for (const a of projectAllocs.filter((a) => inDept(a) && inScope(a))) {
+      for (const a of projectAllocs.filter(inDept)) {
         const emp: Partial<BillingEmployeeRow> = employeeById[a.employee_id] || {};
         const rate = Number(emp.hourly_rate || 0);
         const hours = Number(a.hours);
