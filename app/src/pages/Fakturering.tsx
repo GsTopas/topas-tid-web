@@ -7,6 +7,7 @@ import { MultiPeriodPicker } from "../components/PeriodPicker";
 import { exportInvoicePdf, hoursByRate, invoiceRows, projectMonthTable, rateCols, rateColumns } from "../lib/invoice";
 import { ProjectEconomyView } from "../components/ProjectEconomyView";
 import { DEPARTMENTS } from "./settings/shared";
+import { makeKategoriOpslag, type KategoriOpslag } from "../lib/fordelingskategori";
 
 type Billing = Awaited<ReturnType<typeof api.ecoBilling>>;
 
@@ -18,6 +19,14 @@ export function Fakturering({ flash }: Props) {
   const [valgtProjekt, setValgtProjekt] = useState("");
   // Afdelingsfilter: "" = alle afdelinger
   const [afd, setAfd] = useState("");
+  // Fordelingskategori pr. (afdeling, opgavetype), fra Settings → Opgavetyper
+  const [kategori, setKategori] = useState<KategoriOpslag>(() => () => "");
+
+  useEffect(() => {
+    api.taskTypeCategories().then(rows => setKategori(() => makeKategoriOpslag(rows))).catch((err: Error) => {
+      flash?.("⚠️ Kunne ikke hente fordelingskategorier: " + err.message);
+    });
+  }, []);
 
   useEffect(() => {
     if (!sel) {
@@ -110,6 +119,9 @@ export function Fakturering({ flash }: Props) {
       }, {
         key: "ty",
         label: "Opgave"
+      }, {
+        key: "kat",
+        label: "Fordelingskategori"
       }, ...(harKilde ? [{
         key: "kilde",
         label: "Kilde"
@@ -121,10 +133,11 @@ export function Fakturering({ flash }: Props) {
         key: "kr",
         label: "Beløb (kr)",
         num: true
-      }]} rows={invoiceRows(linjer, rates)} footer={{
+      }]} rows={invoiceRows(linjer, rates, kategori)} footer={{
         afd: "I ALT",
         emp: "",
         ty: "",
+        kat: "",
         kilde: "",
         ...hoursByRate(linjer, rates),
         t: fmtNum(sumT),
@@ -207,7 +220,7 @@ export function Fakturering({ flash }: Props) {
               ekstra: projectMonthTable(p)
             };
             exportInvoicePdf(args);
-          }}>⬇️ PDF</button>}</summary><ProjectEconomyView p={p} /></details>)}</>}<h3>Projekt-økonomi</h3><details className="fakt projok"><summary><strong>📁 Hvad har projekterne kostet indtil videre?</strong><span className="muted"> — vælg et projekt og se forbruget siden projektstart</span></summary><p className="muted small">Akkumuleret forbrug uafhængigt af den valgte periode — gælder både drift-projekter (faktureres løbende) og afslutningsprojekter (gemmes til aktivering).</p><select value={valgtProjekt} onChange={e => setValgtProjekt(e.target.value)}><option value="">— vælg projekt —</option>{projekter.map(p => <option value={p.comp} key={p.comp}>{p.comp} — {fmtNum(p.t)} t · {fmtKr(p.kr)} kr</option>)}</select>{projekt && <div className="projokdetalje"><p><span className="badge">{projekt.billing === "samlet" ? "🗂️ Samlet afregning ved afslutning" : "🔁 Drift — faktureres løbende"}</span> <strong>{fmtNum(projekt.t)} t · {fmtKr(projekt.kr)} kr</strong> siden projektstart{projekt.billing === "samlet" && (projekt.expected ? ` · forventes afregnet ${fmtDate(projekt.expected)}` : " · afregningsdato ikke sat")}{projekt.lines.length > 0 && <button className="ghost pdfbtn" title="Download PDF med projektopgørelsen" onClick={() => {
+          }}>⬇️ PDF</button>}</summary><ProjectEconomyView p={p} kategori={kategori} /></details>)}</>}<h3>Projekt-økonomi</h3><details className="fakt projok"><summary><strong>📁 Hvad har projekterne kostet indtil videre?</strong><span className="muted"> — vælg et projekt og se forbruget siden projektstart</span></summary><p className="muted small">Akkumuleret forbrug uafhængigt af den valgte periode — gælder både drift-projekter (faktureres løbende) og afslutningsprojekter (gemmes til aktivering).</p><select value={valgtProjekt} onChange={e => setValgtProjekt(e.target.value)}><option value="">— vælg projekt —</option>{projekter.map(p => <option value={p.comp} key={p.comp}>{p.comp} — {fmtNum(p.t)} t · {fmtKr(p.kr)} kr</option>)}</select>{projekt && <div className="projokdetalje"><p><span className="badge">{projekt.billing === "samlet" ? "🗂️ Samlet afregning ved afslutning" : "🔁 Drift — faktureres løbende"}</span> <strong>{fmtNum(projekt.t)} t · {fmtKr(projekt.kr)} kr</strong> siden projektstart{projekt.billing === "samlet" && (projekt.expected ? ` · forventes afregnet ${fmtDate(projekt.expected)}` : " · afregningsdato ikke sat")}{projekt.lines.length > 0 && <button className="ghost pdfbtn" title="Download PDF med projektopgørelsen" onClick={() => {
             const args = {
               til: projekt.comp,
               linjer: projekt.lines,
@@ -219,5 +232,5 @@ export function Fakturering({ flash }: Props) {
               ekstra: projectMonthTable(projekt)
             };
             exportInvoicePdf(args);
-          }}>⬇️ PDF</button>}</p><ProjectEconomyView p={projekt} visning="opgave" /></div>}</details></div>;
+          }}>⬇️ PDF</button>}</p><ProjectEconomyView p={projekt} visning="opgave" kategori={kategori} /></div>}</details></div>;
 }

@@ -3,16 +3,19 @@ import { DataTable } from "./DataTable";
 import { fmtKr, fmtNum, monthLabel } from "../lib/format";
 import { hoursByRate, invoiceRows, rateColumns, rateCols } from "../lib/invoice";
 import type { InvoiceLine, ProjectEconomy } from "../lib/invoice";
+import type { KategoriOpslag } from "../lib/fordelingskategori";
 
 type Props = {
   p: ProjectEconomy;
   visning?: "medarbejder" | "opgave" | string;
+  /** Giver kolonnen "Fordelingskategori" ved siden af "Opgave" (kun i Fakturering). */
+  kategori?: KategoriOpslag;
 };
 
 type TaskGroup = { ty: string; t: number; kr: number; linjer: InvoiceLine[] };
 
 /** Projektøkonomi: optjent pr. måned + linjer pr. medarbejder eller pr. opgavetype. */
-export function ProjectEconomyView({ p, visning = "medarbejder" }: Props) {
+export function ProjectEconomyView({ p, visning = "medarbejder", kategori }: Props) {
   if (p.lines.length === 0) {
     return <p className="muted small">Ingen timer registreret på projektet endnu.</p>;
   }
@@ -33,6 +36,12 @@ export function ProjectEconomyView({ p, visning = "medarbejder" }: Props) {
     g.kr += line.kr;
     g.linjer.push(line);
   }
+  const katCol = kategori ? [{
+    key: "kat",
+    label: "Fordelingskategori"
+  }] : [];
+  // Samme opgavenavn kan findes i flere afdelinger; vis de forskellige kategorier
+  const taskKat = (g: TaskGroup) => kategori ? [...new Set(g.linjer.map(l => kategori(l.dept, l.ty)).filter(Boolean))].join(" / ") : "";
   const tasks = Object.values(byTask).sort((a, b) => b.kr - a.kr || a.ty.localeCompare(b.ty));
   return <Fragment><h4>Optjent pr. måned{p.fordeling.length > 0 && (samlet ? " — og indirekte fakturering pr. selskab" : " — fordeling efter de gældende regler")}</h4><DataTable cols={[{
       key: "md",
@@ -62,7 +71,7 @@ export function ProjectEconomyView({ p, visning = "medarbejder" }: Props) {
     }} />{samlet && p.fordeling.length === 0 && <p className="muted small">Ingen fordelingsregler — slutfakturaen sendes direkte til projektets modpart. Opret regler i Settings → Fordelingsregler, hvis beløbet skal fordeles til selskaber ved aktivering.</p>}{visning === "opgave" ? <Fragment><h4>Pr. opgavetype</h4><DataTable cols={[{
         key: "ty",
         label: "Opgave"
-      }, ...rateCols(rates), {
+      }, ...katCol, ...rateCols(rates), {
         key: "t",
         label: "Timer i alt",
         num: true
@@ -72,6 +81,7 @@ export function ProjectEconomyView({ p, visning = "medarbejder" }: Props) {
         num: true
       }]} rows={tasks.map(g => ({
         ty: g.ty,
+        kat: taskKat(g),
         ...hoursByRate(g.linjer, rates),
         t: fmtNum(round2(g.t)),
         kr: fmtKr(g.kr)
@@ -89,7 +99,7 @@ export function ProjectEconomyView({ p, visning = "medarbejder" }: Props) {
       }, {
         key: "ty",
         label: "Opgave"
-      }, ...rateCols(rates), {
+      }, ...katCol, ...rateCols(rates), {
         key: "t",
         label: "Timer i alt",
         num: true
@@ -97,7 +107,7 @@ export function ProjectEconomyView({ p, visning = "medarbejder" }: Props) {
         key: "kr",
         label: "Beløb (kr)",
         num: true
-      }]} rows={invoiceRows(p.lines, rates)} footer={{
+      }]} rows={invoiceRows(p.lines, rates, kategori)} footer={{
         afd: "I ALT",
         emp: "",
         ty: "",

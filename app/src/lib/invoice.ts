@@ -3,6 +3,7 @@ import autoTable from "jspdf-autotable";
 import type { CellHookData, RowInput } from "jspdf-autotable";
 import type { Row } from "../components/DataTable";
 import { fmtKr, fmtNum, monthLabel } from "./format";
+import type { KategoriOpslag } from "./fordelingskategori";
 
 /** En fakturalinje (medarbejder × opgave [× kilde]) som leveret af api.ecoBilling (`invoice` og `projekter[].lines`). */
 export type InvoiceLine = {
@@ -53,10 +54,11 @@ export function hoursByRate(lines: { rate: number | string | null; t: number }[]
   return Object.fromEntries(rates.map(rate => [rateKey(rate), sums[rateKey(rate)] ? fmtNum(sums[rateKey(rate)]) : ""]));
 }
 
-/** Tabelrækker med subtotal pr. afdeling (linjerne forventes sorteret efter afdeling). */
-export function invoiceRows(lines: InvoiceLine[], rates: number[]): Row[] {
+/** Tabelrækker med subtotal pr. afdeling (linjerne forventes sorteret efter afdeling).
+ *  `kategori` udfylder kolonnen "kat" (Fordelingskategori, kun vist i Fakturering). */
+export function invoiceRows(lines: InvoiceLine[], rates: number[], kategori?: KategoriOpslag): Row[] {
   const out: Row[] = [];
-  const keys = ["afd", "emp", "ty", "kilde", ...rates.map(rateKey), "t", "kr"];
+  const keys = ["afd", "emp", "ty", "kat", "kilde", ...rates.map(rateKey), "t", "kr"];
   let dept: string | null = null;
   let group: InvoiceLine[] = [];
   const pushSubtotal = () => {
@@ -65,6 +67,7 @@ export function invoiceRows(lines: InvoiceLine[], rates: number[]): Row[] {
         afd: `Subtotal ${dept || "(uden afdeling)"}`,
         emp: "",
         ty: "",
+        kat: "",
         kilde: "",
         ...hoursByRate(group, rates),
         t: fmtNum(group.reduce((acc, l) => acc + l.t, 0)),
@@ -85,6 +88,7 @@ export function invoiceRows(lines: InvoiceLine[], rates: number[]): Row[] {
       afd: line.dept || "",
       emp: line.emp,
       ty: line.ty || "—",
+      kat: kategori ? kategori(line.dept, line.ty) : "",
       kilde: line.kilde || "",
       ...Object.fromEntries(rates.map(rate => [rateKey(rate), rateKey(rate) === k ? fmtNum(line.t) : ""])),
       t: fmtNum(line.t),
