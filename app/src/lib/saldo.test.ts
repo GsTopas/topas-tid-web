@@ -24,8 +24,8 @@ describe("flexfri (kode 51)", () => {
   it("trækkes fra i Kontrol på en arbejdsdag: 07–15 med 5,5 t flexfri giver −5,5", () => {
     expect(kontrolDay({ work_date: "2026-09-30", location: "Andet sted", work_hours: 2, absence_hours: 5.5, ...flex }, 7.5)).toBe(-5.5);
   });
-  it("hel flexfri-dag giver −timerne (uden timer: −norm)", () => {
-    expect(kontrolDay({ work_date: "2026-09-30", location: null, work_hours: null, absence_hours: 7.5, ...flex }, 7.5)).toBe(-7.5);
+  it("hel flexfri-dag giver altid −dagens norm", () => {
+    expect(kontrolDay({ work_date: "2026-09-30", location: null, work_hours: null, absence_hours: 4, ...flex }, 7.5)).toBe(-7.5);
     expect(kontrolDay({ work_date: "2026-09-30", location: null, work_hours: null, absence_hours: null, ...flex }, 7)).toBe(-7);
   });
   it("andet fravær tæller stadig med som før", () => {

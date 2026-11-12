@@ -22,7 +22,7 @@ export const isFlexfri = (e: { absence_type?: string | null; absence_code?: unkn
  * Kontrol for én dag, eller null når dagen ikke har Kontrol.
  * - Arbejdsdag: arbejdstid + fravær − dagens norm. Flexfri tæller ikke som fravær, så
  *   07–15 med 5,5 t flexfri giver 2 − 7,5 = −5,5.
- * - Hel flexfri-dag (uden arbejdssted): −flexfri-timerne (uden timer: −dagens norm).
+ * - Hel flexfri-dag (uden arbejdssted): altid −dagens norm (Gorm, 12.11.2026).
  * - Andre dage uden arbejdssted: ingen Kontrol.
  */
 export function kontrolDay(e: KontrolEntry, dayNormHours: number): number | null {
@@ -32,7 +32,7 @@ export function kontrolDay(e: KontrolEntry, dayNormHours: number): number | null
     return Number(e.work_hours) + (flexfri ? 0 : absence) - dayNormHours;
   }
   if (flexfri) {
-    return -(e.absence_hours != null ? absence : dayNormHours);
+    return -dayNormHours;
   }
   return null;
 }
