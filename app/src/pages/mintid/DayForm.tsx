@@ -61,9 +61,9 @@ export function DayForm({ form, setForm, date, boot, normHours, totals, simple =
   const allowed = (t: string) => isAdmin || !ADMIN_ONLY_TYPES.includes(t) || form.day_type === t || form.extra_abs === t;
   return <section className="dayform"><h2>{WEEKDAYS_LONG[weekdayIdx(date)]} {fmtDate(date)}</h2>{normHours > 0 && <span className="muted">Normal arbejdstid: {fmtNum(normHours)} timer</span>}<fieldset className="lockable" disabled={locked}><div className="types">{DAY_TYPES.filter(([type]) => allowed(type)).map(([type, icon]) => <button className={"type" + (form.day_type === type ? " sel" : "")} onClick={() => onPickType(type)} key={type}><span>{icon}</span> {type}</button>)}</div>{LOCATION_NOTE_TYPES.includes(form.day_type) && <input className="wide" placeholder={form.day_type === "Rejsedag" ? "Hvor? (fx Vietnam)" : "Hvor? (fx hjemmefra)"} value={form.location_note} onChange={e => patch({
       location_note: e.target.value
-    })} />}{isAbsenceDay && <div className="row"><label>Fraværstimer<input className="hours" inputMode="decimal" value={form.absence_hours} onChange={e => patch({
+    })} />}{isAbsenceDay && <div className="row">{form.day_type === FLEXFRI ? <label>Timer<input className="hours" value={fmtNum(normHours)} disabled={true} title="En hel flexfri-dag er altid dagens normtid. Delvis flexfri: vælg arbejdsdag og brug &quot;Fravær/ferie samme dag?&quot;" /></label> : <label>Fraværstimer<input className="hours" inputMode="decimal" value={form.absence_hours} onChange={e => patch({
           absence_hours: e.target.value
-        })} /></label>{form.day_type === "Andet – firmabetalt" && <label>Hvilken slags? (kode 50)<select value={form.absence_choice} onChange={e => patch({
+        })} /></label>}{form.day_type === "Andet – firmabetalt" && <label>Hvilken slags? (kode 50)<select value={form.absence_choice} onChange={e => patch({
           absence_choice: e.target.value
         })}><option value="">— vælg —</option>{(boot.andet_valg || []).map(o => <option key={o}>{o}</option>)}</select></label>}{form.day_type === FIRM_PAID_FREE_TEXT && <label>Hvilken slags? (kode 50 — fritekst)<input value={form.absence_note} placeholder="Beskriv fraværet …" onChange={e => patch({
           absence_note: e.target.value

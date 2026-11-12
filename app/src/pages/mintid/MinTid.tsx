@@ -4,7 +4,7 @@ import { addDays, approvedByText, fmtDate, fmtNum, parseNum, weekdayIdx } from "
 import { PeriodSelect } from "../../components/PeriodPicker";
 import { confirmDiscard } from "../settings/shared";
 import { hasOncall, hasTaskTracking } from "../../lib/departments";
-import { ABSENCE_TYPES, absenceChoiceFor, absenceCodeFor, FREE_TEXT_TYPES, toDbDayType, WEEKDAYS_LONG, WORK_DAY_TYPES } from "./constants";
+import { ABSENCE_TYPES, absenceChoiceFor, absenceCodeFor, FLEXFRI, FREE_TEXT_TYPES, toDbDayType, WEEKDAYS_LONG, WORK_DAY_TYPES } from "./constants";
 import { DayForm, type FormTotals } from "./DayForm";
 import { NormUge } from "./NormUge";
 import { dayStatusIcon, PeriodCalendar } from "./PeriodCalendar";
@@ -82,7 +82,8 @@ export function MinTid({ mt, period, boot, setBoot, emp, periods, flash }: Props
       extra_abs: isWorkDay && h.extra_abs ? toDbDayType(h.extra_abs) : null,
       absence_code: code,
       absence_choice: absenceChoiceFor(absType, h.absence_choice),
-      absence_hours: isAbsenceDay || isWorkDay && h.extra_abs ? parseNum(h.absence_hours) : null,
+      // Hel flexfri-dag er altid dagens normtid (Gorm, 12.11.2026); delvis flexfri angives på en arbejdsdag.
+      absence_hours: !isWorkDay && h.day_type === FLEXFRI ? normFor(date) : isAbsenceDay || isWorkDay && h.extra_abs ? parseNum(h.absence_hours) : null,
       time_in: isWorkDay ? h.time_in : null,
       time_out: isWorkDay ? h.time_out : null,
       work_hours: isWorkDay ? parseNum(h.work_hours) : null,
