@@ -56,7 +56,7 @@ type Props = {
 
 export function DayForm({ form, setForm, date, boot, normHours, totals, simple = false, oncall = false, patch, updateAlloc, missingTask, partialAbsence, onSaveDefaults, onAddLine, onPickType, companyNames, locked = false }: Props) {
   const { isWorkDay, isAbsenceDay, total, allocated, remaining, pct, over, done, taskRequired } = totals;
-  // "Andet firma betalt fravær" kan kun vælges af admins; en dag der allerede har typen viser den stadig.
+  // "Andet – firmabetalt (fritekst)" kan kun vælges af admins; en dag der allerede har typen viser den stadig.
   const isAdmin = !!boot.employee?.is_admin;
   const allowed = (t: string) => isAdmin || !ADMIN_ONLY_TYPES.includes(t) || form.day_type === t || form.extra_abs === t;
   return <section className="dayform"><h2>{WEEKDAYS_LONG[weekdayIdx(date)]} {fmtDate(date)}</h2>{normHours > 0 && <span className="muted">Normal arbejdstid: {fmtNum(normHours)} timer</span>}<fieldset className="lockable" disabled={locked}><div className="types">{DAY_TYPES.filter(([type]) => allowed(type)).map(([type, icon]) => <button className={"type" + (form.day_type === type ? " sel" : "")} onClick={() => onPickType(type)} key={type}><span>{icon}</span> {type}</button>)}</div>{LOCATION_NOTE_TYPES.includes(form.day_type) && <input className="wide" placeholder={form.day_type === "Rejsedag" ? "Hvor? (fx Vietnam)" : "Hvor? (fx hjemmefra)"} value={form.location_note} onChange={e => patch({
