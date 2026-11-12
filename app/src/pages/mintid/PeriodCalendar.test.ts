@@ -23,7 +23,9 @@ describe("dayStatusIcon", () => {
 
 describe("absenceLabel", () => {
   it("viser den konkrete type i stedet for Øvrigt fravær", () => {
-    expect(absenceLabel({ absence_type: "Øvrigt fravær", absence_code: "51" })).toBe("Andet – egen betalt");
+    expect(absenceLabel({ absence_type: "Øvrigt fravær", absence_code: "51" })).toBe("Andet fravær - flexfri eller lign.");
+    expect(absenceLabel({ absence_type: "Øvrigt fravær", absence_code: "50", absence_choice: "Andet firma betalt fravær" })).toBe("Andet firma betalt fravær");
+    expect(absenceLabel({ absence_type: "Øvrigt fravær", absence_code: "50", absence_choice: "Flyttefri" })).toBe("Andet – firmabetalt");
     expect(absenceLabel({ absence_type: "Øvrigt fravær", absence_code: "50" })).toBe("Andet – firmabetalt");
     expect(absenceLabel({ absence_type: "Ferie", location: "Kontor" })).toBe("½ feriedag");
     expect(absenceLabel({ absence_type: "Egen sygdom" })).toBe("Egen sygdom");

@@ -3,8 +3,8 @@ import { api, type Boot } from "../lib/api";
 import { fmtDate, fmtNum, weekdayIdx } from "../lib/format";
 import { dayNorm, type NormSplit } from "../lib/norm";
 import { hasOncall, isSimpleDepartment } from "../lib/departments";
-import { oncallHours } from "../lib/saldo";
-import { absenceLabel } from "./mintid/constants";
+import { dayKontrol, flexFreeHours, oncallHours } from "../lib/saldo";
+import { absenceChoiceLabel, absenceLabel } from "./mintid/constants";
 
 const fmtSigned = (n: number) => (n >= 0 ? "+" : "") + fmtNum(n);
 import { DataTable, type Row } from "../components/DataTable";
@@ -69,8 +69,8 @@ export function MinPeriode({ boot }: { boot: Boot }) {
   let date = period.start_date;
   let sumWork = 0;
   let sumAbsence = 0;
-  /** Fravær med kode 51 ("Andet – egen betalt") er ikke betalt; alt andet fravær er. */
-  let sumUnpaid = 0;
+  /** Flexfri (kode 51) tæller ikke som fravær; timerne trækkes fra i Kontrol. */
+  let sumFlexFree = 0;
   let sumControl = 0;
   let sumAllocated = 0;
   let sumOncall = 0;
@@ -78,7 +78,10 @@ export function MinPeriode({ boot }: { boot: Boot }) {
     const entry: DayEntry | undefined = byDate[date];
     const weekend = weekdayIdx(date) >= 5;
     const work = entry?.work_hours != null ? Number(entry.work_hours) : null;
-    const absence = entry?.absence_hours != null ? Number(entry.absence_hours) : 0;
+    // Flexfri ("Andet fravær - flexfri eller lign.") vises ikke som fravær, men trækkes fra i Kontrol.
+    const flexFree = flexFreeHours(entry);
+    const absence = entry?.absence_hours != null && !flexFree ? Number(entry.absence_hours) : 0;
+    const control = entry ? dayKontrol(entry, normFor(date)) : null;
     const allocated = Number(data.day_alloc?.[date] || 0);
     // Vagttelefon vises kun i sin egen kolonne; den tæller ikke med i Kontrol eller saldo.
     const oncall = oncallHours(entry);
@@ -88,15 +91,12 @@ export function MinPeriode({ boot }: { boot: Boot }) {
     if (work != null && entry != null && entry.location) {
       sumWork += work;
       sumAllocated += allocated;
-      sumControl += work + absence - normFor(date);
     }
-    if (entry?.absence_hours != null) {
-      sumAbsence += absence;
-      if (entry.absence_type === "Øvrigt fravær" && entry.absence_code === "51") {
-        sumUnpaid += absence;
-      }
-    }
-    const note = [entry?.location_note, entry?.note].filter(Boolean).join(" · ");
+    sumControl += control ?? 0;
+    sumAbsence += absence;
+    sumFlexFree += flexFree;
+    const showAbsence = !!entry?.absence_type && !flexFree;
+    const note = [flexFree ? [`Flexfri ${fmtNum(flexFree)} t`, entry?.absence_note].filter(Boolean).join(": ") : "", entry?.location_note, entry?.note].filter(Boolean).join(" · ");
     const cls: Record<string, string> = weekend ? Object.fromEntries(["dato", "sted", "frav", "fravt", "ind", "ud", "arb", "vagt", "ford", "ktrl", "note"].map(k => [k, "wknd"])) : {
       frav: "gul",
       fravt: "gul",
@@ -109,15 +109,15 @@ export function MinPeriode({ boot }: { boot: Boot }) {
     rows.push({
       dato: `${WEEKDAYS[weekdayIdx(date)]} ${date.slice(8, 10)}.${date.slice(5, 7)}`,
       sted: entry?.location || "",
-      // Den konkrete fraværstype + valg og fritekst, fx "Andet – egen betalt · skuespilsjob".
-      frav: entry?.absence_type ? [absenceLabel(entry), entry.absence_choice, entry.absence_note].filter(Boolean).join(" · ") : "",
-      fravt: entry?.absence_hours != null ? fmtNum(absence) : "",
+      // Den konkrete fraværstype + valg og fritekst, fx "Andet – firmabetalt · Lægebesøg – egen".
+      frav: showAbsence ? [absenceLabel(entry!), absenceChoiceLabel(entry!.absence_choice), entry!.absence_note].filter(Boolean).join(" · ") : "",
+      fravt: showAbsence && entry?.absence_hours != null ? fmtNum(absence) : "",
       ind: entry?.time_in?.slice(0, 5) || "",
       ud: entry?.time_out?.slice(0, 5) || "",
       arb: work != null ? fmtNum(work) : "",
       vagt: oncall > 0 ? fmtNum(oncall) : "",
       ford: work != null && entry != null && entry.location ? mismatch ? `${fmtNum(allocated)} ⚠` : fmtNum(allocated) : "",
-      ktrl: work != null && entry != null && entry.location ? (work + absence - normFor(date) >= 0 ? "+" : "") + fmtNum(work + absence - normFor(date)) : "",
+      ktrl: control != null ? fmtSigned(control) : "",
       note,
       _cls: cls
     });
@@ -173,13 +173,13 @@ export function MinPeriode({ boot }: { boot: Boot }) {
       arb: fmtNum(sumWork),
       vagt: fmtNum(sumOncall),
       ford: fmtNum(sumAllocated) + (Math.abs(sumAllocated - sumWork) > 0.01 ? " ⚠" : ""),
-      ktrl: (sumControl >= 0 ? "+" : "") + fmtNum(sumControl),
+      ktrl: fmtSigned(sumControl),
       note: ""
-    }} extraFooter={[{
+    }} extraFooter={[...(sumFlexFree > 0 ? [{
       dato: "",
       sted: "",
-      frav: "heraf betalt fravær:",
-      fravt: fmtNum(sumAbsence - sumUnpaid),
+      frav: "flexfri (trukket fra i Kontrol):",
+      fravt: fmtNum(sumFlexFree),
       ind: "",
       ud: "",
       arb: "",
@@ -187,19 +187,7 @@ export function MinPeriode({ boot }: { boot: Boot }) {
       ford: "",
       ktrl: "",
       note: ""
-    }, {
-      dato: "",
-      sted: "",
-      frav: "heraf egen betalt (kode 51):",
-      fravt: fmtNum(sumUnpaid),
-      ind: "",
-      ud: "",
-      arb: "",
-      vagt: "",
-      ford: "",
-      ktrl: "",
-      note: ""
-    }, {
+    }] : []), {
       dato: "ÅTD SALDO",
       sted: "",
       frav: saldo ? <span className="muted small">{`Start saldo ${fmtSigned(saldo.start)} + Kontrol ${fmtSigned(saldo.kontrol)}${saldo.tilskrevet ? ` + Tilskrevet ${fmtSigned(saldo.tilskrevet)}` : ""} (${fmtDate(yearStart)} – ${fmtDate(period.end_date)})`}</span> : "",

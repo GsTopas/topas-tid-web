@@ -76,7 +76,7 @@ Current row counts: 15 employees, 20 companies, 374 day entries, 1,537 allocatio
 
 ## 5. Time registration rules (Min tid)
 
-- **Day types:** Kontor, Andet sted (with "hvor"), Rejsedag (with a note), Ferie, Egen sygdom, Barn syg, Andet – firmabetalt (code 50 + choice), Andet – egen betalt (code 51), and Ingen (deletes the day).
+- **Day types:** Kontor, Andet sted (with "hvor"), Rejsedag (with a note), Ferie, Egen sygdom, Barn syg, Andet – firmabetalt (code 50 + choice), Andet firma betalt fravær (code 50 + free text, admins only), Andet fravær - flexfri eller lign. (code 51; renamed from "Andet – egen betalt" 12 Nov 2026), and Ingen (deletes the day).
 - **Work hours** = time out − time in − lunch − partial absence, rounded to the nearest **quarter hour**. Times are picked in 5-minute steps. Lunch defaults to 30 min (options 0/15/30/45/60/90). The default time out = 08:00 + norm + 30 min.
 - **Partial absence on a working day** (doctor, partial sickness, child sick) reduces work hours but still counts in the total.
 - The **split** must equal work hours. Status per day: 🟢 fully split, 🟠 partly split, 🔴 missing (a past workday with norm > 0 and no entry), or an absence icon.
