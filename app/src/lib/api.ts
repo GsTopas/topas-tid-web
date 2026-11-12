@@ -23,6 +23,8 @@ export interface EmployeeSelfRow {
   /** Kan leder-godkende medarbejdere i alle afdelinger. */
   approves_all_departments: boolean;
   hired_date: string | null;
+  /** Opgavestyring: skriver ned, hvad de har arbejdet med (Timefordeling). Uden = enkel visning. */
+  task_tracking: boolean;
 }
 
 export type SessionEmployee = EmployeeSelfRow & {
@@ -209,6 +211,8 @@ export interface MatrixEmployee {
   department: string | null;
   weekly_norm: WeeklyNorm;
   hired_date: string | null;
+  /** Opgavestyring: skriver ned, hvad de har arbejdet med (Timefordeling). Uden = enkel visning. */
+  task_tracking: boolean;
 }
 
 export interface MatrixEntry {
@@ -390,6 +394,8 @@ export interface EmployeeAdminRow {
   is_manager: boolean;
   /** Kan leder-godkende medarbejdere i alle afdelinger. */
   approves_all_departments: boolean;
+  /** Opgavestyring: skriver ned, hvad de har arbejdet med (Timefordeling). Uden = enkel visning. */
+  task_tracking: boolean;
   active: boolean;
   hourly_rate: number | null;
   hired_date: string | null;
@@ -488,6 +494,8 @@ export interface ProxyEmployee {
   department: string | null;
   weekly_norm: WeeklyNorm;
   hired_date: string | null;
+  /** Opgavestyring: skriver ned, hvad de har arbejdet med (Timefordeling). Uden = enkel visning. */
+  task_tracking: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -544,7 +552,7 @@ export async function currentEmployee(): Promise<SessionEmployee | null> {
   const rows = await q<EmployeeSelfRow>(
     supabase
       .from("employees")
-      .select("id, name, department, weekly_norm, is_admin, is_manager, approves_all_departments, hired_date")
+      .select("id, name, department, weekly_norm, is_admin, is_manager, approves_all_departments, hired_date, task_tracking")
       .eq("auth_user_id", user.id)
       .eq("active", true),
   );
@@ -927,7 +935,7 @@ export const api = {
   ): Promise<{ employees: MatrixEmployee[]; entries: MatrixEntry[]; alloc_sums: MatrixAllocSum[]; today: string }> {
     const [employees, entries, allocs] = await Promise.all([
       q<MatrixEmployee>(
-        supabase.from("employees").select("id, name, department, weekly_norm, hired_date").eq("active", true).order("name"),
+        supabase.from("employees").select("id, name, department, weekly_norm, hired_date, task_tracking").eq("active", true).order("name"),
       ),
       q<MatrixEntry>(
         supabase
@@ -974,17 +982,7 @@ export const api = {
    * dept (afdelingsfilter): kun timer registreret af medarbejdere i den afdeling (deres nuværende
    * afdeling i Medarbejdere) tælles med, også i projektøkonomien. Uden dept: som originalen.
    */
-  /**
-   * dept: kun timer fra medarbejdere i afdelingen.
-   * scope: kun timer registreret på selskabet (only) eller alle andre end det (exclude),
-   * fx "Alle afdelinger minus TEG" / "kun TEG" i Fakturering.
-   */
-  async ecoBilling(
-    from: string,
-    to: string,
-    dept?: string | null,
-    scope?: { companyId: number; mode: "only" | "exclude" } | null,
-  ): Promise<EcoBillingResult> {
+  async ecoBilling(from: string, to: string, dept?: string | null): Promise<EcoBillingResult> {
     const [allAllocs, rules, companies, employees] = await Promise.all([
       fetchAll<BillingAllocRow>(() =>
         supabase
@@ -1001,9 +999,7 @@ export const api = {
     const companyById: Record<string, BillingCompanyRow> = Object.fromEntries(companies.map((c) => [c.id, c]));
     const employeeById: Record<string, BillingEmployeeRow> = Object.fromEntries(employees.map((e) => [e.id, e]));
     const inDept = (a: { employee_id: number }) => !dept || (employeeById[a.employee_id]?.department || "") === dept;
-    const inScope = (a: { company_id: number }) =>
-      !scope || (scope.mode === "only" ? a.company_id === scope.companyId : a.company_id !== scope.companyId);
-    const allocs = allAllocs.filter((a) => inDept(a) && inScope(a));
+    const allocs = allAllocs.filter(inDept);
     const samletIds = new Set(companies.filter((c) => c.kind === "projekt" && c.billing_type === "samlet").map((c) => c.id));
     const billable = allocs.filter((a) => !samletIds.has(a.company_id));
 
@@ -1196,7 +1192,7 @@ export const api = {
       );
       type ProjectAcc = { t: number; kr: number; lines: Record<string, EmpTaskLine>; mdr: Record<string, HoursKr> };
       const byProject: Record<string, ProjectAcc> = {};
-      for (const a of projectAllocs.filter((a) => inDept(a) && inScope(a))) {
+      for (const a of projectAllocs.filter(inDept)) {
         const emp: Partial<BillingEmployeeRow> = employeeById[a.employee_id] || {};
         const rate = Number(emp.hourly_rate || 0);
         const hours = Number(a.hours);
@@ -1328,7 +1324,7 @@ export const api = {
       supabase
         .from("employees")
         .select(
-          "id, name, email, department, employer_company_id, is_admin, is_manager, approves_all_departments, active, hourly_rate, hired_date, payroll_number, weekly_norm, flex_start, auth_user_id",
+          "id, name, email, department, employer_company_id, is_admin, is_manager, approves_all_departments, task_tracking, active, hourly_rate, hired_date, payroll_number, weekly_norm, flex_start, auth_user_id",
         )
         .order("name"),
     ),
@@ -1613,7 +1609,7 @@ export const api = {
   },
 
   proxyEmployees: (): Promise<ProxyEmployee[]> =>
-    q<ProxyEmployee>(supabase.from("employees").select("id, name, department, weekly_norm, hired_date").eq("active", true).order("name")),
+    q<ProxyEmployee>(supabase.from("employees").select("id, name, department, weekly_norm, hired_date, task_tracking").eq("active", true).order("name")),
 
   /** Kalder edge function "onboard" (opret/nulstil login). */
   async manageLogin(action: string, email: string, password?: string): Promise<unknown> {
