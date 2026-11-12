@@ -4,7 +4,7 @@ import { addDays, approvedByText, fmtDate, fmtNum, parseNum, weekdayIdx } from "
 import { PeriodSelect } from "../../components/PeriodPicker";
 import { confirmDiscard } from "../settings/shared";
 import { hasOncall, isSimpleDepartment } from "../../lib/departments";
-import { ABSENCE_TYPES, absenceCodeFor, toDbDayType, WEEKDAYS_LONG, WORK_DAY_TYPES } from "./constants";
+import { ABSENCE_TYPES, absenceChoiceFor, absenceCodeFor, FREE_TEXT_TYPES, toDbDayType, WEEKDAYS_LONG, WORK_DAY_TYPES } from "./constants";
 import { DayForm, type FormTotals } from "./DayForm";
 import { NormUge } from "./NormUge";
 import { dayStatusIcon, PeriodCalendar } from "./PeriodCalendar";
@@ -76,12 +76,12 @@ export function MinTid({ mt, period, boot, setBoot, emp, periods, flash }: Props
       work_date: date,
       day_type: toDbDayType(h.day_type),
       location_note: h.location_note || null,
-      // Fritekstfeltet vises kun ved "Andet – egen betalt" (kode 51). Gem det ikke ved andre typer,
+      // Fritekstfeltet vises kun ved flexfri (kode 51) og "Andet firma betalt fravær". Gem det ikke ved andre typer,
       // ellers bliver en gammel tekst hængende usynligt på dagen (fx efter skift til ½ feriedag).
-      absence_note: absType === "Andet – egen betalt" && h.absence_note || null,
+      absence_note: FREE_TEXT_TYPES.includes(absType) && h.absence_note || null,
       extra_abs: isWorkDay && h.extra_abs ? toDbDayType(h.extra_abs) : null,
       absence_code: code,
-      absence_choice: code === "50" && h.absence_choice || null,
+      absence_choice: absenceChoiceFor(absType, h.absence_choice),
       absence_hours: isAbsenceDay || isWorkDay && h.extra_abs ? parseNum(h.absence_hours) : null,
       time_in: isWorkDay ? h.time_in : null,
       time_out: isWorkDay ? h.time_out : null,
