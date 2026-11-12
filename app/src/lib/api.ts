@@ -1493,7 +1493,7 @@ export const api = {
       q<KontrolEntry>(
         supabase
           .from("day_entries")
-          .select("work_date, location, work_hours, absence_hours, oncall_hours")
+          .select("work_date, location, work_hours, absence_hours, absence_type, absence_code, oncall_hours")
           .eq("employee_id", employeeId)
           .gte("work_date", from)
           .lte("work_date", to),

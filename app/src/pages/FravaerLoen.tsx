@@ -4,8 +4,8 @@ import { api } from "../lib/api";
 import { addDays, fmtDate, fmtNum } from "../lib/format";
 import { holidayDays } from "../lib/ferie";
 import { downloadCsv } from "../lib/csv";
-import { absenceLabel } from "./mintid/constants";
-import { oncallHours } from "../lib/saldo";
+import { absenceLabel, choiceLabel } from "./mintid/constants";
+import { isFlexfri, kontrolDay, oncallHours } from "../lib/saldo";
 import { DataTable } from "../components/DataTable";
 import { useMultiPeriod } from "../hooks/usePeriods";
 import { MultiPeriodPicker } from "../components/PeriodPicker";
@@ -96,14 +96,16 @@ export function FravaerLoen() {
         _eid: e.employee_id,
         _hired: e.hired_date
       };
-      const fravaerTimer = e.absence_hours != null ? Number(e.absence_hours) : 0;
+      // Flexfri (kode 51) er ikke fravær: den vises ikke her, men trækkes fra i Flex (som i Kontrol).
+      const flexfri = isFlexfri(e);
+      const fravaerTimer = e.absence_hours != null && !flexfri ? Number(e.absence_hours) : 0;
       const dagsNorm = dayNorm(e.weekly_norm as WeeklyNorm, splits[e.employee_id], e.work_date);
+      s.flex += kontrolDay(e, dagsNorm) ?? 0;
       if (e.work_hours != null && e.location) {
         const arbTimer = Number(e.work_hours);
         s.arb += arbTimer;
         s.reg += arbTimer + fravaerTimer;
-        s.flex += arbTimer + fravaerTimer - dagsNorm;
-      } else if (e.absence_type) {
+      } else if (e.absence_type && !flexfri) {
         // Hel fraværsdag uden angivne timer tæller som dagens norm
         s.reg += e.absence_hours != null ? fravaerTimer : dagsNorm;
       }
@@ -116,10 +118,10 @@ export function FravaerLoen() {
         s.syg += fravaerTimer;
       } else if (e.absence_type === "Barn syg") {
         s.barn += fravaerTimer;
-      } else if (e.absence_type === "Øvrigt fravær") {
+      } else if (e.absence_type === "Øvrigt fravær" && !flexfri) {
         s["øvr"] += fravaerTimer;
       }
-      if (e.absence_type) {
+      if (e.absence_type && !flexfri) {
         fravaer.push({
           eid: e.employee_id,
           iso: e.work_date,
@@ -128,7 +130,7 @@ export function FravaerLoen() {
           afd: e.department || "",
           dato: fmtDate(e.work_date),
           type: absenceLabel(e),
-          valg: e.absence_choice || "",
+          valg: choiceLabel(e.absence_choice),
           kodeTxt: e.absence_code || "",
           timer: e.absence_hours != null ? fmtNum(fravaerTimer) : "",
           omfang: e.location ? "Delvis (arbejdede også)" : "Hel dag",

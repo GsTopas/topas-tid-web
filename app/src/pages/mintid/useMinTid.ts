@@ -189,8 +189,8 @@ export function useMinTid(boot: Boot | null) {
           lunch = inferLunchMin(timeIn, timeOut, Number(entry.work_hours), partialAbs);
         }
         const loaded: DayFormState = {
-          day_type: entry ? entry.location || fromDbAbsenceType(entry.absence_type, entry.absence_code) || "Ingen" : normDay?.day_off ? "Ingen" : norm > 0 || normDay ? "Kontor" : "Ingen",
-          extra_abs: entry != null && entry.location && entry != null && entry.absence_type ? fromDbPartialAbsence(entry.absence_type, entry.absence_code) : "",
+          day_type: entry ? entry.location || fromDbAbsenceType(entry.absence_type, entry.absence_code, entry.absence_choice) || "Ingen" : normDay?.day_off ? "Ingen" : norm > 0 || normDay ? "Kontor" : "Ingen",
+          extra_abs: entry != null && entry.location && entry != null && entry.absence_type ? fromDbPartialAbsence(entry.absence_type, entry.absence_code, entry.absence_choice) : "",
           absence_choice: entry?.absence_choice || "",
           location_note: entry?.location_note || "",
           absence_note: entry?.absence_note || "",

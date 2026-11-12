@@ -1,7 +1,7 @@
 import type { Dispatch, SetStateAction } from "react";
 import type { Boot } from "../../lib/api";
 import { fmtDate, fmtNum, parseNum, weekdayIdx } from "../../lib/format";
-import { DAY_TYPES, LOCATION_NOTE_TYPES, LUNCH_OPTIONS, PARTIAL_ABSENCE_TYPES, WEEKDAYS_LONG } from "./constants";
+import { ADMIN_ONLY_TYPES, DAY_TYPES, FIRM_PAID_FREE_TEXT, FLEXFRI, LOCATION_NOTE_TYPES, LUNCH_OPTIONS, PARTIAL_ABSENCE_TYPES, WEEKDAYS_LONG } from "./constants";
 import { HALF_HOLIDAY } from "../../lib/ferie";
 import { workHours } from "./time";
 import { TimePicker } from "./TimePicker";
@@ -56,13 +56,18 @@ type Props = {
 
 export function DayForm({ form, setForm, date, boot, normHours, totals, simple = false, oncall = false, patch, updateAlloc, missingTask, partialAbsence, onSaveDefaults, onAddLine, onPickType, companyNames, locked = false }: Props) {
   const { isWorkDay, isAbsenceDay, total, allocated, remaining, pct, over, done, taskRequired } = totals;
-  return <section className="dayform"><h2>{WEEKDAYS_LONG[weekdayIdx(date)]} {fmtDate(date)}</h2>{normHours > 0 && <span className="muted">Normal arbejdstid: {fmtNum(normHours)} timer</span>}<fieldset className="lockable" disabled={locked}><div className="types">{DAY_TYPES.map(([type, icon]) => <button className={"type" + (form.day_type === type ? " sel" : "")} onClick={() => onPickType(type)} key={type}><span>{icon}</span> {type}</button>)}</div>{LOCATION_NOTE_TYPES.includes(form.day_type) && <input className="wide" placeholder={form.day_type === "Rejsedag" ? "Hvor? (fx Vietnam)" : "Hvor? (fx hjemmefra)"} value={form.location_note} onChange={e => patch({
+  // "Andet firma betalt fravær" kan kun vælges af admins; en dag der allerede har typen viser den stadig.
+  const isAdmin = !!boot.employee?.is_admin;
+  const allowed = (t: string) => isAdmin || !ADMIN_ONLY_TYPES.includes(t) || form.day_type === t || form.extra_abs === t;
+  return <section className="dayform"><h2>{WEEKDAYS_LONG[weekdayIdx(date)]} {fmtDate(date)}</h2>{normHours > 0 && <span className="muted">Normal arbejdstid: {fmtNum(normHours)} timer</span>}<fieldset className="lockable" disabled={locked}><div className="types">{DAY_TYPES.filter(([type]) => allowed(type)).map(([type, icon]) => <button className={"type" + (form.day_type === type ? " sel" : "")} onClick={() => onPickType(type)} key={type}><span>{icon}</span> {type}</button>)}</div>{LOCATION_NOTE_TYPES.includes(form.day_type) && <input className="wide" placeholder={form.day_type === "Rejsedag" ? "Hvor? (fx Vietnam)" : "Hvor? (fx hjemmefra)"} value={form.location_note} onChange={e => patch({
       location_note: e.target.value
     })} />}{isAbsenceDay && <div className="row"><label>Fraværstimer<input className="hours" inputMode="decimal" value={form.absence_hours} onChange={e => patch({
           absence_hours: e.target.value
         })} /></label>{form.day_type === "Andet – firmabetalt" && <label>Hvilken slags? (kode 50)<select value={form.absence_choice} onChange={e => patch({
           absence_choice: e.target.value
-        })}><option value="">— vælg —</option>{(boot.andet_valg || []).map(o => <option key={o}>{o}</option>)}</select></label>}{form.day_type === "Andet – egen betalt" && <label>Hvilken slags? (kode 51 — fritekst)<input value={form.absence_note} placeholder="fx ikke optjent ferie, privat gøremål …" onChange={e => patch({
+        })}><option value="">— vælg —</option>{(boot.andet_valg || []).map(o => <option key={o}>{o}</option>)}</select></label>}{form.day_type === FIRM_PAID_FREE_TEXT && <label>Hvilken slags? (kode 50 — fritekst)<input value={form.absence_note} placeholder="Beskriv fraværet …" onChange={e => patch({
+          absence_note: e.target.value
+        })} /></label>}{form.day_type === FLEXFRI && <label>Hvilken slags? (fritekst — trækkes fra i Kontrol)<input value={form.absence_note} placeholder="fx flexfri, privat gøremål …" onChange={e => patch({
           absence_note: e.target.value
         })} /></label>}</div>}{isWorkDay && <div className="row"><label>Mødt<TimePicker value={form.time_in} onChange={v => patch({
           time_in: v,
@@ -90,12 +95,14 @@ export function DayForm({ form, setForm, date, boot, normHours, totals, simple =
             } : {}),
             work_hours: fmtNum(workHours(form.time_in, form.time_out, form.lunch_min, absHours))
           });
-        }}><option value="">Intet fravær</option>{PARTIAL_ABSENCE_TYPES.map(o => <option key={o}>{o}</option>)}</select></label>{form.extra_abs && <label>{form.extra_abs === HALF_HOLIDAY ? "Ferietimer" : "Fraværstimer"}<input className="hours" inputMode="decimal" value={form.absence_hours} onChange={e => patch({
+        }}><option value="">Intet fravær</option>{PARTIAL_ABSENCE_TYPES.filter(allowed).map(o => <option key={o}>{o}</option>)}</select></label>{form.extra_abs && <label>{form.extra_abs === HALF_HOLIDAY ? "Ferietimer" : "Fraværstimer"}<input className="hours" inputMode="decimal" value={form.absence_hours} onChange={e => patch({
           absence_hours: e.target.value,
           work_hours: fmtNum(workHours(form.time_in, form.time_out, form.lunch_min, parseNum(e.target.value) || 0))
         })} /></label>}{form.extra_abs === "Andet – firmabetalt" && <label>Hvilken slags? (kode 50)<select value={form.absence_choice} onChange={e => patch({
           absence_choice: e.target.value
-        })}><option value="">— vælg —</option>{(boot.andet_valg || []).map(o => <option key={o}>{o}</option>)}</select></label>}{form.extra_abs === "Andet – egen betalt" && <label>Hvilken slags? (kode 51 — fritekst)<input value={form.absence_note} placeholder="fx privat gøremål …" onChange={e => patch({
+        })}><option value="">— vælg —</option>{(boot.andet_valg || []).map(o => <option key={o}>{o}</option>)}</select></label>}{form.extra_abs === FIRM_PAID_FREE_TEXT && <label>Hvilken slags? (kode 50 — fritekst)<input value={form.absence_note} placeholder="Beskriv fraværet …" onChange={e => patch({
+          absence_note: e.target.value
+        })} /></label>}{form.extra_abs === FLEXFRI && <label>Hvilken slags? (fritekst — trækkes fra i Kontrol)<input value={form.absence_note} placeholder="fx flexfri, privat gøremål …" onChange={e => patch({
           absence_note: e.target.value
         })} /></label>}</div>}{isWorkDay && form.extra_abs && (() => {
       const sum = (parseNum(form.work_hours) || 0) + (parseNum(form.absence_hours) || 0);
