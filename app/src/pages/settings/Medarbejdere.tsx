@@ -4,7 +4,7 @@ import { fmtDate, fmtNum, parseNum } from "../../lib/format";
 import type { NormSplit } from "../../lib/norm";
 import type { HourCredit, Period } from "../../lib/api";
 import { TilskrevneTimer } from "./TilskrevneTimer";
-import { isSimpleDepartment } from "../../lib/departments";
+import { defaultTaskTracking } from "../../lib/departments";
 import { DEPARTMENTS, SaveAllBar, keepDirty, randomTempPassword, saveDirtyRows, splitWeeklyNorm, sumNorm, useDirtyRows } from "./shared";
 
 type Employee = Awaited<ReturnType<typeof api.employeesAll>>[number];
@@ -14,8 +14,9 @@ type Company = Awaited<ReturnType<typeof api.companiesAll>>[number];
 type EmployerFilter = string;
 type SortKey = "name" | "employer" | "department";
 
-/** Enkel visning (fx Topas Travel) viderefakturerer ikke: timeprisen er tom og gemmes som 0. */
-const NO_RATE_TITLE = "Afdelingen viderefakturerer ikke, så den har ingen timepris";
+/** Uden opgavestyring (enkel visning) viderefaktureres der ikke: timeprisen er tom og gemmes som 0. */
+const NO_RATE_TITLE = "Uden opgavestyring viderefaktureres timerne ikke, så der er ingen timepris";
+const TASK_TRACKING_TITLE = "Opgavestyring: medarbejderen skriver ned, hvad de har arbejdet med (Timefordeling på selskaber og projekter). Uden opgavestyring registreres kun mødt/gået, fravær og ferie";
 
 type EditedFields =
   | "name"
@@ -29,6 +30,7 @@ type EditedFields =
   | "is_admin"
   | "is_manager"
   | "approves_all_departments"
+  | "task_tracking"
   | "active";
 
 /** En medarbejder-række mens den redigeres: talfelter kan midlertidigt være tekst fra input-felterne. */
@@ -44,6 +46,7 @@ type EmployeeRow = Omit<Employee, EditedFields> & {
   is_admin: boolean;
   is_manager: boolean;
   approves_all_departments: boolean;
+  task_tracking: boolean;
   active: boolean;
   /** Redigeret Norm/uge-tekst (kun sat når brugeren har rørt feltet). */
   norm_uge?: string;
@@ -62,6 +65,8 @@ type NewEmployee = {
   saldo: string;
   admin: boolean;
   leder: boolean;
+  /** Opgavestyring; startværdi efter afdelingen (Topas Travel uden). */
+  opgave: boolean;
   hired: string;
 };
 
@@ -162,8 +167,9 @@ export function Medarbejdere({ flash }: { flash: (msg: string) => void }) {
         is_admin: p.is_admin,
         is_manager: p.is_manager,
         approves_all_departments: p.approves_all_departments,
+        task_tracking: p.task_tracking,
         active: p.active,
-        hourly_rate: isSimpleDepartment(p.department) ? 0 : parseNum(String(p.hourly_rate)) ?? 0,
+        hourly_rate: !p.task_tracking ? 0 : parseNum(String(p.hourly_rate)) ?? 0,
         hired_date: p.hired_date || null,
         payroll_number: parsePayrollNumber(p.payroll_number),
         flex_start: parseNum(String(p.flex_start ?? 0)) ?? 0
@@ -205,7 +211,7 @@ export function Medarbejdere({ flash }: { flash: (msg: string) => void }) {
   const copyPassword = (pw: string) =>
     navigator.clipboard?.writeText(pw).then(() => flash("✓ Password kopieret"), () => flash("⚠️ Kunne ikke kopiere — skriv det af"));
   const loginDialog = loginDlg && <div className="modal-backdrop" onClick={() => !loginDlg.busy && setLoginDlg(null)}><div className="modal" role="dialog" aria-modal="true" aria-labelledby="login-titel" onClick={e => e.stopPropagation()} onKeyDown={e => e.key === "Escape" && !loginDlg.busy && setLoginDlg(null)}><h3 id="login-titel">{loginDlg.action === "create" ? "Opret login" : "Nulstil password"} · {loginDlg.p.name}</h3>{loginDlg.password ? <><p className="small">{loginDlg.action === "create" ? "Login er oprettet" : "Password er nulstillet"} for <b>{loginDlg.p.email}</b>. Midlertidigt password:</p><p className="ok pwinfo" style={{ fontSize: "1.2em", userSelect: "all" }}>🔑 {loginDlg.password}</p><p className="muted small">Skriv det ned eller kopiér det, det vises kun her. Medarbejderen skal vælge sit eget password ved første login.</p><div className="modal-actions"><button className="ghost" onClick={() => copyPassword(loginDlg.password!)}>📋 Kopiér</button><button className="primary" autoFocus onClick={() => setLoginDlg(null)}>Luk</button></div></> : <><p className="small">{loginDlg.action === "create" ? `Opret login til ${loginDlg.p.email}? Der laves et midlertidigt password, som vises her bagefter.` : `Nulstil password for ${loginDlg.p.email}? Det nuværende password holder op med at virke, og der laves et midlertidigt, som vises her bagefter.`}</p><div className="modal-actions"><button className="ghost" disabled={loginDlg.busy} onClick={() => setLoginDlg(null)}>Annullér</button><button className="primary" autoFocus disabled={loginDlg.busy} onClick={() => manageLogin(loginDlg.p, loginDlg.action)}>{loginDlg.busy ? "Arbejder…" : loginDlg.action === "create" ? "Opret login" : "Nulstil password"}</button></div></>}</div></div>;
-  return <div>{loginDialog}<div className="row"><label>Ansat i <select value={employerFilter} onChange={g => setEmployerFilter(g.target.value)}><option value="">Alle selskaber</option><option value="none">Ikke angivet</option>{companies.filter(c => c.kind === "selskab").map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label><label>Sortér efter <select value={sortKey} onChange={g => setSortKey(g.target.value as SortKey)}><option value="name">Navn</option><option value="employer">Ansat i</option><option value="department">Afdeling</option></select></label><span className="muted small" style={{ alignSelf: "flex-end", paddingBottom: 10 }}>{shown.length} af {rows.length} medarbejdere</span></div><div className="tablewrap"><table className="datatable admin"><thead><tr><th>Navn</th><th>Mail</th><th>Afdeling</th><th title="Selskabet medarbejderen er ansat i">Ansat i</th><th className="num">Timepris</th><th>Startdato</th><th className="num">Lønnr.</th><th className="num" title="Flex-saldo ved start (timer, kan være negativ)">Start saldo</th><th className="num" title="Normtid pr. uge — sæt ned ved deltid. Fordeles automatisk man–fre. En ændring gælder fra den valgte lønperiode og frem">Norm/uge</th><th className="num" title="Timer tilskrevet ÅTD saldo i år (fx afspadsering for vagttelefon), pr. lønperiode">Timer tilskrives</th><th>Admin</th><th>Leder</th><th title="Kan leder-godkende medarbejdere i alle afdelinger">Godkender alle</th><th>Aktiv</th><th>Login</th></tr></thead><tbody>{shown.map(p => <tr className={p.active ? "" : "inaktiv"} key={p.id}><td><input value={p.name} onChange={g => patch(p.id, {
+  return <div>{loginDialog}<div className="row"><label>Ansat i <select value={employerFilter} onChange={g => setEmployerFilter(g.target.value)}><option value="">Alle selskaber</option><option value="none">Ikke angivet</option>{companies.filter(c => c.kind === "selskab").map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label><label>Sortér efter <select value={sortKey} onChange={g => setSortKey(g.target.value as SortKey)}><option value="name">Navn</option><option value="employer">Ansat i</option><option value="department">Afdeling</option></select></label><span className="muted small" style={{ alignSelf: "flex-end", paddingBottom: 10 }}>{shown.length} af {rows.length} medarbejdere</span></div><div className="tablewrap"><table className="datatable admin"><thead><tr><th>Navn</th><th>Mail</th><th>Afdeling</th><th title="Selskabet medarbejderen er ansat i">Ansat i</th><th title={TASK_TRACKING_TITLE}>Opgavestyring</th><th className="num">Timepris</th><th>Startdato</th><th className="num">Lønnr.</th><th className="num" title="Flex-saldo ved start (timer, kan være negativ)">Start saldo</th><th className="num" title="Normtid pr. uge — sæt ned ved deltid. Fordeles automatisk man–fre. En ændring gælder fra den valgte lønperiode og frem">Norm/uge</th><th className="num" title="Timer tilskrevet ÅTD saldo i år (fx afspadsering for vagttelefon), pr. lønperiode">Timer tilskrives</th><th>Admin</th><th>Leder</th><th title="Kan leder-godkende medarbejdere i alle afdelinger">Godkender alle</th><th>Aktiv</th><th>Login</th></tr></thead><tbody>{shown.map(p => <tr className={p.active ? "" : "inaktiv"} key={p.id}><td><input value={p.name} onChange={g => patch(p.id, {
                 name: g.target.value
               })} /></td><td><input value={p.email || ""} onChange={g => patch(p.id, {
                 email: g.target.value
@@ -213,7 +219,9 @@ export function Medarbejdere({ flash }: { flash: (msg: string) => void }) {
                 department: g.target.value
               })}><option value="">—</option>{DEPARTMENTS.map(g => <option key={g}>{g}</option>)}</select></td><td><select value={p.employer_company_id ?? ""} onChange={g => patch(p.id, {
                 employer_company_id: g.target.value ? Number(g.target.value) : null
-              })}><option value="">—</option>{employerOptions(p.employer_company_id).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></td><td>{isSimpleDepartment(p.department) ? <input className="hours" value="" disabled title={NO_RATE_TITLE} /> : <input className="hours" value={String(p.hourly_rate).replace(".", ",")} onChange={g => patch(p.id, {
+              })}><option value="">—</option>{employerOptions(p.employer_company_id).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></td><td><input type="checkbox" title={TASK_TRACKING_TITLE} checked={!!p.task_tracking} onChange={g => patch(p.id, {
+                task_tracking: g.target.checked
+              })} /></td><td>{!p.task_tracking ? <input className="hours" value="" disabled title={NO_RATE_TITLE} /> : <input className="hours" value={String(p.hourly_rate).replace(".", ",")} onChange={g => patch(p.id, {
                 hourly_rate: g.target.value
               })} />}</td><td><input type="date" title="Dage før startdatoen tæller ikke som manglende" value={p.hired_date || ""} onChange={g => patch(p.id, {
                 hired_date: g.target.value
@@ -241,11 +249,15 @@ export function Medarbejdere({ flash }: { flash: (msg: string) => void }) {
         email: p.target.value
       })} /><select value={draft.department} onChange={p => setDraft({
         ...draft,
-        department: p.target.value
+        department: p.target.value,
+        opgave: defaultTaskTracking(p.target.value)
       })}>{DEPARTMENTS.map(p => <option key={p}>{p}</option>)}</select><select title="Ansat i selskab" value={draft.employer} onChange={p => setDraft({
         ...draft,
         employer: p.target.value
-      })}><option value="">Ansat i —</option>{employerOptions(null).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select>{isSimpleDepartment(draft.department) ? <input className="hours" placeholder="Timepris" value="" disabled title={NO_RATE_TITLE} /> : <input className="hours" placeholder="Timepris" value={draft.rate} onChange={p => setDraft({
+      })}><option value="">Ansat i —</option>{employerOptions(null).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select><label title={TASK_TRACKING_TITLE}><input type="checkbox" checked={draft.opgave} onChange={p => setDraft({
+          ...draft,
+          opgave: p.target.checked
+        })} /> Opgavestyring</label>{!draft.opgave ? <input className="hours" placeholder="Timepris" value="" disabled title={NO_RATE_TITLE} /> : <input className="hours" placeholder="Timepris" value={draft.rate} onChange={p => setDraft({
         ...draft,
         rate: p.target.value
       })} />}<input type="date" title="Startdato" value={draft.hired} onChange={p => setDraft({
@@ -273,9 +285,10 @@ export function Medarbejdere({ flash }: { flash: (msg: string) => void }) {
             email: (draft.email || "").trim().toLowerCase() || null,
             department: draft.department,
             employer_company_id: draft.employer ? Number(draft.employer) : null,
-            hourly_rate: isSimpleDepartment(draft.department) ? 0 : parseNum(draft.rate) ?? 0,
+            hourly_rate: !draft.opgave ? 0 : parseNum(draft.rate) ?? 0,
             is_admin: !!draft.admin,
             is_manager: !!draft.leder,
+            task_tracking: draft.opgave,
             active: true,
             weekly_norm: splitWeeklyNorm(parseNum(draft.norm) ?? 37),
             flex_start: parseNum(String(draft.saldo ?? "0")) ?? 0,
@@ -299,6 +312,7 @@ export function Medarbejdere({ flash }: { flash: (msg: string) => void }) {
       saldo: "0",
       admin: false,
       leder: false,
+      opgave: defaultTaskTracking("Marketing"),
       hired: new Date().toISOString().slice(0, 10)
-    })}>➕ Ny medarbejder</button>}<p className="muted small">Norm/uge fordeles automatisk man–fre i kvarter (37 = 7,5/7,5/7,5/7,5/7 t; 30 = 6 t om dagen) — sæt den ned ved deltid. En ændring gælder fra den valgte lønperiode og frem; tidligere perioder beregnes med den gamle normtid (hold musen over feltet for at se historikken). Timer tilskrives = timer der lægges til ÅTD saldo for en lønperiode, fx afspadsering for vagttelefon; de indtastes manuelt (også i Afdelings overblik). Start saldo = flex-saldo ved start. Opret login bagefter i Login-kolonnen.</p></div>;
+    })}>➕ Ny medarbejder</button>}<p className="muted small">Norm/uge fordeles automatisk man–fre i kvarter (37 = 7,5/7,5/7,5/7,5/7 t; 30 = 6 t om dagen) — sæt den ned ved deltid. En ændring gælder fra den valgte lønperiode og frem; tidligere perioder beregnes med den gamle normtid (hold musen over feltet for at se historikken). Timer tilskrives = timer der lægges til ÅTD saldo for en lønperiode, fx afspadsering for vagttelefon; de indtastes manuelt (også i Afdelings overblik). Opgavestyring = medarbejderen fordeler sine timer på selskaber og projekter (Timefordeling); uden den registreres kun mødt/gået, fravær og ferie, og der er ingen timepris. Start saldo = flex-saldo ved start. Opret login bagefter i Login-kolonnen.</p></div>;
 }

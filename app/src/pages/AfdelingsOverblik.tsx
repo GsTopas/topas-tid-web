@@ -5,7 +5,7 @@ import { api, type SessionEmployee } from "../lib/api";
 import { downloadCsv } from "../lib/csv";
 import { addDays, approvedByText, fmtDate, fmtNum, parseNum } from "../lib/format";
 import { dayNorm, splitsByEmployee, type NormSplit } from "../lib/norm";
-import { DEPARTMENTS, isSimpleDepartment } from "../lib/departments";
+import { DEPARTMENTS, hasTaskTracking } from "../lib/departments";
 
 type Matrix = Awaited<ReturnType<typeof api.ecoMatrix>>;
 type MatrixEmployee = Matrix["employees"][number];
@@ -179,8 +179,8 @@ export function AfdelingsOverblik({ emp, flash }: { emp: SessionEmployee | null;
         if (W) {
           if (W.location) {
             const workHours = Number(W.work_hours || 0);
-            // Enkel visning (fx Topas Travel) fordeler ikke timer: en arbejdsdag med timer er udfyldt.
-            if (workHours > 0 && (isSimpleDepartment(I.department) || Math.abs((allocByKey[`${I.id}|${V}`] || 0) - workHours) <= 0.01)) {
+            // Uden opgavestyring (enkel visning, fx Topas Travel) fordeler ikke timer: en arbejdsdag med timer er udfyldt.
+            if (workHours > 0 && (!hasTaskTracking(I) || Math.abs((allocByKey[`${I.id}|${V}`] || 0) - workHours) <= 0.01)) {
               return {
                 c: "✓",
                 cls: "m-ok"

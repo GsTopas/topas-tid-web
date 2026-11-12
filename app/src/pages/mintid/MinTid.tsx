@@ -3,7 +3,7 @@ import { api, type Boot, type Period, type SessionEmployee } from "../../lib/api
 import { addDays, approvedByText, fmtDate, fmtNum, parseNum, weekdayIdx } from "../../lib/format";
 import { PeriodSelect } from "../../components/PeriodPicker";
 import { confirmDiscard } from "../settings/shared";
-import { hasOncall, isSimpleDepartment } from "../../lib/departments";
+import { hasOncall, hasTaskTracking } from "../../lib/departments";
 import { ABSENCE_TYPES, absenceCodeFor, toDbDayType, WEEKDAYS_LONG, WORK_DAY_TYPES } from "./constants";
 import { DayForm, type FormTotals } from "./DayForm";
 import { NormUge } from "./NormUge";
@@ -31,8 +31,8 @@ export function MinTid({ mt, period, boot, setBoot, emp, periods, flash }: Props
   const { dayStatus, form, setForm, saving, setSaving, bulkFrom, setBulkFrom, bulkTo, setBulkTo, proxyList, proxyEmp, setProxyEmp, economyApproved, leaderApproval, leaderLocked, normFor, beforeHired, reloadDays } = mt;
   const selectedDate = mt.selectedDate as string;
 
-  /** Enkel visning (fx Topas Travel): kun dagen, fravær og ferie; ingen timefordeling. Følger den, der registreres for. */
-  const simple = isSimpleDepartment(proxyEmp ? proxyEmp.department : emp.department);
+  /** Enkel visning (uden opgavestyring, fx Topas Travel): kun dagen, fravær og ferie; ingen timefordeling. Følger den, der registreres for. */
+  const simple = !hasTaskTracking(proxyEmp ?? emp);
   /** Vagttelefon (fx Topas Travel): timer oveni normtiden, også på en dag uden arbejde. Følger den, der registreres for. */
   const oncall = hasOncall(proxyEmp ? proxyEmp.department : emp.department);
   const isWorkDay = form && WORK_DAY_TYPES.includes(form.day_type);
