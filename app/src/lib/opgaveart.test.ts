@@ -3,8 +3,8 @@ import { artForCompany, companiesForArt, groupTasks, opgaveartEnabled, tasksForA
 
 const companies = [{ id: 1, name: "Topas Travel" }, { id: 2, name: "Projekt GL" }, { id: 3, name: "Hotel Icefiord" }];
 const companyKinds = { 1: "selskab", 2: "projekt", 3: "selskab" };
-const options = ["Testing", "Maintenance & support", "GDPR"];
-const taskKinds = { Testing: "projekt", "Maintenance & support": "drift" };
+const options = ["Testing", "Maintenance & support", "GDPR", "Design & content"];
+const taskKinds = { Testing: "projekt", "Maintenance & support": "drift", "Design & content": "begge" };
 
 describe("opgaveart", () => {
   it("projekt = projekt, selskab = drift", () => {
@@ -19,13 +19,14 @@ describe("opgaveart", () => {
   });
   it("projekt: alle opgavetyper (også drift); drift: driftsopgaver + ikke angivet", () => {
     expect(tasksForArt("projekt", options, taskKinds)).toEqual(options);
-    expect(tasksForArt("drift", options, taskKinds)).toEqual(["Maintenance & support", "GDPR"]);
+    expect(tasksForArt("drift", options, taskKinds)).toEqual(["Maintenance & support", "GDPR", "Design & content"]);
     expect(tasksForArt("", options, taskKinds)).toEqual(options);
   });
   it("grupperer i Projektopgaver / Driftsopgaver / Øvrige", () => {
     expect(groupTasks(options, taskKinds)).toEqual([
       { label: "Projektopgaver", options: ["Testing"] },
       { label: "Driftsopgaver", options: ["Maintenance & support"] },
+      { label: "Projekt- og driftsopgaver", options: ["Design & content"] },
       { label: "Øvrige", options: ["GDPR"] },
     ]);
     expect(groupTasks(["GDPR"], {})).toEqual([{ label: "Øvrige", options: ["GDPR"] }]);

@@ -1,9 +1,9 @@
 /**
  * Projekt- eller driftsopgave (Gorm, 17. nov. 2026).
- * - Opgavetyper har `task_types.task_kind` = "projekt" | "drift" | null (ikke angivet), sat i Settings → Opgavetyper.
+ * - Opgavetyper har `task_types.task_kind` = "projekt" | "drift" | "begge" | null (ikke angivet), sat i Settings → Opgavetyper.
  * - En timelinje i Min tid starter med valget Projekt eller Drift: Projekt → et projekt (companies.kind = projekt)
  *   og alle opgavetyper (projektopgaver først; Gorm: man må godt vælge en driftsopgave under et projekt);
- *   Drift → et selskab (companies.kind = selskab) og driftsopgavetyper. Opgavetyper uden angivelse kan vælges under begge.
+ *   Drift → et selskab (companies.kind = selskab) og driftsopgaver. "Begge" og ikke angivet kan vælges under begge.
  * Linjens art gemmes ikke; den udledes af det valgte selskab/projekt.
  */
 export type Opgaveart = "projekt" | "drift";
@@ -13,7 +13,13 @@ export const OPGAVEARTER: { value: Opgaveart; label: string; plural: string }[] 
   { value: "drift", label: "Driftsopgave", plural: "Driftsopgaver" },
 ];
 
-export const opgaveartLabel = (k: string | null | undefined): string => OPGAVEARTER.find(o => o.value === k)?.label || "";
+/** Valgene for en opgavetype i Settings → Opgavetyper (task_types.task_kind). */
+export const TASK_KINDS: { value: string; label: string; plural: string }[] = [
+  ...OPGAVEARTER,
+  { value: "begge", label: "Både projekt og drift", plural: "Projekt- og driftsopgaver" },
+];
+
+export const opgaveartLabel = (k: string | null | undefined): string => TASK_KINDS.find(o => o.value === k)?.label || "";
 
 /** companies.kind → linjens art: et projekt er projektopgave, et selskab driftsopgave. */
 export const artForCompany = (companyKind: string | null | undefined): Opgaveart | "" =>
@@ -24,15 +30,15 @@ export function companiesForArt<T extends { id: number }>(art: Opgaveart | "", c
   return art ? companies.filter(c => artForCompany(companyKinds[c.id]) === art) : companies;
 }
 
-/** Opgavetyper, der kan vælges for en art: Drift = driftsopgaver + typer uden angivelse; Projekt og "" = alle. */
+/** Opgavetyper, der kan vælges for en art: Drift = alt undtagen projektopgaver; Projekt og "" = alle. */
 export function tasksForArt(art: Opgaveart | "", options: string[], taskKinds: Record<string, string>): string[] {
-  return art === "drift" ? options.filter(o => !taskKinds[o] || taskKinds[o] === "drift") : options;
+  return art === "drift" ? options.filter(o => taskKinds[o] !== "projekt") : options;
 }
 
 /** Opgavetyperne grupperet til <optgroup> (kun grupper med indhold; "Øvrige" = ikke angivet). */
 export function groupTasks(options: string[], taskKinds: Record<string, string>): { label: string; options: string[] }[] {
   const groups = [
-    ...OPGAVEARTER.map(o => ({ label: o.plural, options: options.filter(t => taskKinds[t] === o.value) })),
+    ...TASK_KINDS.map(o => ({ label: o.plural, options: options.filter(t => taskKinds[t] === o.value) })),
     { label: "Øvrige", options: options.filter(t => !taskKinds[t]) },
   ];
   return groups.filter(g => g.options.length > 0);
