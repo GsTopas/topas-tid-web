@@ -71,9 +71,17 @@ export interface DefaultAllocation {
   share: number;
 }
 
+/** Opgavetype-navn → task_kind (kun dem med en angivelse). */
+const taskKindMap = (rows: { name: string; task_kind: string | null }[]): Record<string, string> =>
+  Object.fromEntries(rows.filter((r) => r.task_kind).map((r) => [r.name, r.task_kind as string]));
+
 export interface Boot {
   companies: CompanyBasic[];
   task_options: string[];
+  /** companies.kind pr. id ("selskab" | "projekt"), til Projekt/Drift på timelinjen (lib/opgaveart.ts). */
+  company_kinds: Record<number, string>;
+  /** task_types.task_kind pr. opgavetype-navn ("projekt" | "drift"); mangler = ikke angivet. */
+  task_kinds: Record<string, string>;
   period: Period | null;
   defaults: DefaultAllocation[];
   andet_valg: string[];
@@ -85,6 +93,8 @@ export interface Boot {
 export interface FormOptions {
   companies: CompanyBasic[];
   task_options: string[];
+  company_kinds: Record<number, string>;
+  task_kinds: Record<string, string>;
   names: Record<number, string>;
 }
 
@@ -434,6 +444,8 @@ export interface TaskTypeRow {
   sort: number;
   /** Fordelingskategori (lib/fordelingskategori.ts); null = ingen. */
   distribution_category: string | null;
+  /** Projekt- eller driftsopgave (lib/opgaveart.ts); null = ikke angivet. */
+  task_kind: string | null;
 }
 
 export interface TaskTypeCategoryRow {
@@ -642,12 +654,12 @@ export const api = {
     }
     const today = todayIso();
     const [companies, access, taskTypes, periods, defaults, andet] = await Promise.all([
-      q<CompanyBasic>(supabase.from("companies").select("id, name").eq("active", true).order("sort").order("name")),
+      q<CompanyBasic & { kind: string }>(supabase.from("companies").select("id, name, kind").eq("active", true).order("sort").order("name")),
       q<AccessRow>(supabase.from("employee_companies").select("company_id").eq("employee_id", me.id)),
-      q<{ name: string }>(
+      q<{ name: string; task_kind: string | null }>(
         supabase
           .from("task_types")
-          .select("name")
+          .select("name, task_kind")
           .eq("active", true)
           .eq("department", me.department || "")
           .order("sort")
@@ -667,6 +679,8 @@ export const api = {
     return {
       companies: allowed.size ? companies.filter((c) => allowed.has(c.id)) : companies,
       task_options: taskTypes.map((tt) => tt.name),
+      company_kinds: Object.fromEntries(companies.map((c) => [c.id, c.kind])),
+      task_kinds: taskKindMap(taskTypes),
       period: periods[0] || null,
       defaults,
       andet_valg: andet.map((a) => a.label),
@@ -681,12 +695,12 @@ export const api = {
    *  selskaber/projekter, også inaktive, så en gemt linje altid kan vises med sit navn. */
   async formOptions(employeeId: number, department: string | null): Promise<FormOptions> {
     const [all, access, taskTypes] = await Promise.all([
-      q<CompanyBasic & { active: boolean }>(supabase.from("companies").select("id, name, active").order("sort").order("name")),
+      q<CompanyBasic & { active: boolean; kind: string }>(supabase.from("companies").select("id, name, active, kind").order("sort").order("name")),
       q<AccessRow>(supabase.from("employee_companies").select("company_id").eq("employee_id", employeeId)),
-      q<{ name: string }>(
+      q<{ name: string; task_kind: string | null }>(
         supabase
           .from("task_types")
-          .select("name")
+          .select("name, task_kind")
           .eq("active", true)
           .eq("department", department || "")
           .order("sort")
@@ -698,6 +712,8 @@ export const api = {
     return {
       companies: allowed.size ? active.filter((c) => allowed.has(c.id)) : active,
       task_options: taskTypes.map((tt) => tt.name),
+      company_kinds: Object.fromEntries(all.map((c) => [c.id, c.kind])),
+      task_kinds: taskKindMap(taskTypes),
       names: Object.fromEntries(all.map((c) => [c.id, c.name])),
     };
   },
@@ -1385,7 +1401,7 @@ export const api = {
 
   taskTypesFor: (department: string): Promise<TaskTypeRow[]> =>
     q<TaskTypeRow>(
-      supabase.from("task_types").select("id, name, active, sort, distribution_category").eq("department", department).order("sort").order("name"),
+      supabase.from("task_types").select("id, name, active, sort, distribution_category, task_kind").eq("department", department).order("sort").order("name"),
     ),
 
   /** Fordelingskategori for alle afdelingers opgavetyper (til kolonnen i Fakturering). */
@@ -1404,6 +1420,8 @@ export const api = {
           p_active: data.active ?? true,
           // null = behold, "" = ingen kategori
           p_category: data.distribution_category === undefined ? null : data.distribution_category ?? "",
+          // null = behold, "" = ikke angivet
+          p_kind: data.task_kind === undefined ? null : data.task_kind ?? "",
         })
       : await supabase.from("task_types").insert(data);
     if (error) {

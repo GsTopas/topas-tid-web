@@ -105,8 +105,11 @@ describe("rebuilt api.ts matches the original bundle", () => {
     expect(await api.day("2026-09-02")).toEqual(await original.at.day("2026-09-02"));
   });
   it("bootstrap and session employee", async () => {
-    const [a, b] = [await api.bootstrap(), await original.at.bootstrap()];
+    // company_kinds/task_kinds (Projekt/Drift, 17. nov. 2026) findes ikke i originalen.
+    const [{ company_kinds, task_kinds, ...a }, b] = [await api.bootstrap(), await original.at.bootstrap()];
     expect(a).toEqual(b);
+    expect(company_kinds[10]).toBeDefined();
+    expect(task_kinds).toEqual({});
     expect(await api.session()).toEqual(await original.at.session());
   });
 });

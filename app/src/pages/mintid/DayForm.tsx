@@ -4,6 +4,7 @@ import { fmtDate, fmtNum, parseNum, weekdayIdx } from "../../lib/format";
 import { ADMIN_ONLY_TYPES, DAY_TYPES, FIRM_PAID_FREE_TEXT, FLEXFRI, LOCATION_NOTE_TYPES, LUNCH_OPTIONS, PARTIAL_ABSENCE_TYPES, WEEKDAYS_LONG } from "./constants";
 import { HALF_HOLIDAY } from "../../lib/ferie";
 import { workHours } from "./time";
+import { OPGAVEARTER, artForCompany, companiesForArt, groupTasks, opgaveartLabel, tasksForArt, type Opgaveart } from "../../lib/opgaveart";
 import { TimePicker } from "./TimePicker";
 import type { AllocLine, DayFormState } from "./types";
 
@@ -58,6 +59,17 @@ export function DayForm({ form, setForm, date, boot, normHours, totals, simple =
   const { isWorkDay, isAbsenceDay, total, allocated, remaining, pct, over, done, taskRequired } = totals;
   // "Andet – firmabetalt (fritekst)" kan kun vælges af admins; en dag der allerede har typen viser den stadig.
   const isAdmin = !!boot.employee?.is_admin;
+  // Projekt/Drift på timelinjen (lib/opgaveart.ts): vises, når personen kan vælge både projekter og selskaber.
+  const showArt = companiesForArt("projekt", boot.companies, boot.company_kinds).length > 0 && companiesForArt("drift", boot.companies, boot.company_kinds).length > 0;
+  const hasTaskKinds = boot.task_options.some(o => boot.task_kinds[o]);
+  /** Linjens art: valgt selskab/projekt bestemmer; ellers det, der er valgt i Projekt/drift. */
+  const lineArt = (line: AllocLine): Opgaveart | "" => (line.company_id ? artForCompany(boot.company_kinds[Number(line.company_id)]) : "") || line.kind || "";
+  /** Skift af Projekt/drift: selskab/projekt af den anden art nulstilles, og ved Drift også en projektopgavetype. */
+  const pickArt = (idx: number, line: AllocLine, art: Opgaveart | "") => updateAlloc(idx, {
+    kind: art,
+    ...(art && line.company_id && artForCompany(boot.company_kinds[Number(line.company_id)]) !== art ? { company_id: "" } : {}),
+    ...(art === "drift" && boot.task_kinds[line.task_type] === "projekt" ? { task_type: "" } : {})
+  });
   const allowed = (t: string) => isAdmin || !ADMIN_ONLY_TYPES.includes(t) || form.day_type === t || form.extra_abs === t;
   return <section className="dayform"><h2>{WEEKDAYS_LONG[weekdayIdx(date)]} {fmtDate(date)}</h2>{normHours > 0 && <span className="muted">Normal arbejdstid: {fmtNum(normHours)} timer</span>}<fieldset className="lockable" disabled={locked}><div className="types">{DAY_TYPES.filter(([type]) => allowed(type)).map(([type, icon]) => <button className={"type" + (form.day_type === type ? " sel" : "")} onClick={() => onPickType(type)} key={type}><span>{icon}</span> {type}</button>)}</div>{LOCATION_NOTE_TYPES.includes(form.day_type) && <input className="wide" placeholder={form.day_type === "Rejsedag" ? "Hvor? (fx Vietnam)" : "Hvor? (fx hjemmefra)"} value={form.location_note} onChange={e => patch({
       location_note: e.target.value
@@ -112,18 +124,23 @@ export function DayForm({ form, setForm, date, boot, normHours, totals, simple =
           oncall_hours: e.target.value
         })} /></label><span className="muted small">Vises for sig selv og tæller ikke med i arbejdstid eller saldo</span></div>}<input className="wide" placeholder="Note om dagen (fx været til kursus, fysio …)" value={form.note} onChange={e => patch({
       note: e.target.value
-    })} />{isWorkDay && !simple && <><h3>Timefordeling</h3><table className="alloc"><thead><tr><th>Virksomhed/projekt</th>{boot.task_options.length > 0 && <th>Opgavetype</th>}<th>Timer</th><th>Opgavenote</th><th /></tr></thead><tbody>{form.allocations.map((line, idx) => <tr key={idx}><td className="a-comp" data-label="Virksomhed/projekt"><select value={line.company_id || ""} onChange={e => updateAlloc(idx, {
+    })} />{isWorkDay && !simple && <><h3>Timefordeling</h3><table className="alloc"><thead><tr>{showArt && <th>Projekt/drift</th>}<th>{showArt ? "Projekt/selskab" : "Virksomhed/projekt"}</th>{boot.task_options.length > 0 && <th>Opgavetype</th>}<th>Timer</th><th>Opgavenote</th><th /></tr></thead><tbody>{form.allocations.map((line, idx) => {
+            const art = lineArt(line);
+            const comps = companiesForArt(art, boot.companies, boot.company_kinds);
+            const tasks = tasksForArt(art, boot.task_options, boot.task_kinds);
+            return <tr key={idx}>{showArt && <td className="a-kind" data-label="Projekt/drift"><select value={art} onChange={e => pickArt(idx, line, e.target.value as Opgaveart | "")}><option value="">— vælg —</option>{OPGAVEARTER.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</select></td>}<td className="a-comp" data-label={art === "projekt" ? "Projekt" : art === "drift" ? "Selskab" : "Virksomhed/projekt"}><select value={line.company_id || ""} onChange={e => updateAlloc(idx, {
                 company_id: e.target.value
-              })}><option value="">— vælg —</option>{boot.companies.map(c => <option value={c.id} key={c.id}>{c.name}</option>)}{line.company_id && !boot.companies.some(c => c.id === Number(line.company_id)) && <option value={line.company_id}>{companyNames[Number(line.company_id)] || "#" + line.company_id} (ikke valgbar)</option>}</select></td>{boot.task_options.length > 0 && <td className="a-task" data-label="Opgavetype"><select value={line.task_type} className={missingTask(line) ? "mangler" : ""} onChange={e => updateAlloc(idx, {
+              })}><option value="">{art === "projekt" ? "— vælg projekt —" : art === "drift" ? "— vælg selskab —" : "— vælg —"}</option>{comps.map(c => <option value={c.id} key={c.id}>{c.name}</option>)}{line.company_id && !boot.companies.some(c => c.id === Number(line.company_id)) && <option value={line.company_id}>{companyNames[Number(line.company_id)] || "#" + line.company_id} (ikke valgbar)</option>}</select></td>{boot.task_options.length > 0 && <td className="a-task" data-label="Opgavetype"><select value={line.task_type} className={missingTask(line) ? "mangler" : ""} onChange={e => updateAlloc(idx, {
                 task_type: e.target.value
-              })}><option value="">{taskRequired ? "— vælg —" : "—"}</option>{boot.task_options.map(o => <option key={o}>{o}</option>)}{line.task_type && !boot.task_options.includes(line.task_type) && <option value={line.task_type}>{line.task_type} (udgået)</option>}</select></td>}<td className="a-hours" data-label="Timer"><input className="hours" inputMode="decimal" value={line.hours} onChange={e => updateAlloc(idx, {
+              })}><option value="">{taskRequired ? "— vælg —" : "—"}</option>{art === "drift" || !hasTaskKinds ? tasks.map(o => <option key={o}>{o}</option>) : groupTasks(tasks, boot.task_kinds).map(g => <optgroup key={g.label} label={g.label}>{g.options.map(o => <option key={o}>{o}</option>)}</optgroup>)}{line.task_type && !tasks.includes(line.task_type) && <option value={line.task_type}>{line.task_type} ({boot.task_options.includes(line.task_type) ? opgaveartLabel(boot.task_kinds[line.task_type]).toLowerCase() : "udgået"})</option>}</select></td>}<td className="a-hours" data-label="Timer"><input className="hours" inputMode="decimal" value={line.hours} onChange={e => updateAlloc(idx, {
                 hours: e.target.value
               })} /></td><td className="a-note" data-label="Opgavenote"><input value={line.task_note} onChange={e => updateAlloc(idx, {
                 task_note: e.target.value
               })} /></td><td className="a-del">{!locked && <button className="ghost x" title="Fjern linje" onClick={() => setForm(prev => ({
                 ...(prev as DayFormState),
                 allocations: (prev as DayFormState).allocations.filter((_l, i) => i !== idx)
-              }))}>✕</button>}</td></tr>)}</tbody></table>{!locked && <div className="row allocbtns"><button className="ghost" title="Tilføj en ny linje (den forrige linje gemmes automatisk, når den er udfyldt)" onClick={onAddLine}>➕ Tilføj linje</button>{boot.defaults.length > 0 && <button className="ghost" title="Fordel dagens timer efter din gemte standard" onClick={() => {
+              }))}>✕</button>}</td></tr>;
+          })}</tbody></table>{!locked && <div className="row allocbtns"><button className="ghost" title="Tilføj en ny linje (den forrige linje gemmes automatisk, når den er udfyldt)" onClick={onAddLine}>➕ Tilføj linje</button>{boot.defaults.length > 0 && <button className="ghost" title="Fordel dagens timer efter din gemte standard" onClick={() => {
           const hours = parseNum(form.work_hours) || 0;
           setForm(prev => ({
             ...(prev as DayFormState),
