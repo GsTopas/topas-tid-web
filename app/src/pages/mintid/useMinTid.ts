@@ -56,7 +56,7 @@ export function useMinTid(boot: Boot | null) {
   /** Valgmuligheder til dagsformularen: personens egne når de er hentet, ellers (kun for en selv) boot's. */
   const options: FormOptions | null = formOpts && formOpts.empId === empId
     ? formOpts.opts
-    : boot && !proxyEmp ? { companies: boot.companies, task_options: boot.task_options, names: {} } : null;
+    : boot && !proxyEmp ? { companies: boot.companies, task_options: boot.task_options, company_kinds: boot.company_kinds, task_kinds: boot.task_kinds, names: {} } : null;
 
   /** Normugen (mødt/gået/frokost pr. ugedag) og dens dagsfordelinger for empId; null indtil de er hentet. */
   const [normWeek, setNormWeek] = useState<{ empId: number; days: NormDay[]; splits: NormSplit[] } | null>(null);

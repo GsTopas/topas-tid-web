@@ -1593,6 +1593,19 @@ table.datatable tr.foot .saldo {
     color: var(--muted)
   }
 
+  /* Med Projekt/drift-valg: art og slet øverst, projekt/selskab på egen linje */
+  table.alloc tr:has(td.a-kind) {
+    grid-template-areas:
+      "kind kind del"
+      "comp comp comp"
+      "task hours hours"
+      "note note note"
+  }
+
+  table.alloc td.a-kind {
+    grid-area: kind
+  }
+
   table.alloc td.a-comp {
     grid-area: comp
   }

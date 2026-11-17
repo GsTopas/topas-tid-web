@@ -44,7 +44,7 @@ export function MinTid({ mt, period, boot, setBoot, emp, periods, flash }: Props
   const over = total > 0 && allocated - total > 0.01;
   const done = total > 0 && Math.abs(remaining) <= 0.01;
   /** Dagsformularen viser valgmulighederne for den, der registreres for (ikke lederens egne). */
-  const formBoot: Boot | null = mt.options ? { ...boot, companies: mt.options.companies, task_options: mt.options.task_options } : null;
+  const formBoot: Boot | null = mt.options ? { ...boot, companies: mt.options.companies, task_options: mt.options.task_options, company_kinds: mt.options.company_kinds, task_kinds: mt.options.task_kinds } : null;
   const taskRequired = !simple && !!formBoot && formBoot.task_options.length > 0 && mt.empDepartment !== "Hotel & Administration";
   const missingTask = (line: AllocLine): boolean => !!(taskRequired && line.company_id && (parseNum(line.hours) || 0) > 0 && !line.task_type);
   /** En linje med timer men uden virksomhed/projekt ville ellers blive droppet stille ved gem (timerne forsvinder). */

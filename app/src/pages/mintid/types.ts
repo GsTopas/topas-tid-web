@@ -10,6 +10,8 @@ export type DayStatusMap = Record<string, { entry: PeriodDayEntry | null; alloc:
 export type WeeklyNorm = Record<number, number | string | null | undefined>;
 
 export type AllocLine = {
+  /** Projekt eller Drift valgt på linjen, før et projekt/selskab er valgt (gemmes ikke; ellers udledt af selskab/projekt). */
+  kind?: "projekt" | "drift" | "";
   company_id: number | string;
   task_type: string;
   hours: string;
