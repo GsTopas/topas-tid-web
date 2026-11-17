@@ -4,7 +4,7 @@ import { fmtDate, fmtNum, parseNum, weekdayIdx } from "../../lib/format";
 import { ADMIN_ONLY_TYPES, DAY_TYPES, FIRM_PAID_FREE_TEXT, FLEXFRI, LOCATION_NOTE_TYPES, LUNCH_OPTIONS, PARTIAL_ABSENCE_TYPES, WEEKDAYS_LONG } from "./constants";
 import { HALF_HOLIDAY } from "../../lib/ferie";
 import { workHours } from "./time";
-import { OPGAVEARTER, artForCompany, companiesForArt, groupTasks, opgaveartLabel, tasksForArt, type Opgaveart } from "../../lib/opgaveart";
+import { OPGAVEARTER, artForCompany, companiesForArt, groupTasks, opgaveartLabel, tasksForArt, opgaveartEnabled, type Opgaveart } from "../../lib/opgaveart";
 import { TimePicker } from "./TimePicker";
 import type { AllocLine, DayFormState } from "./types";
 
@@ -60,10 +60,11 @@ export function DayForm({ form, setForm, date, boot, normHours, totals, simple =
   // "Andet – firmabetalt (fritekst)" kan kun vælges af admins; en dag der allerede har typen viser den stadig.
   const isAdmin = !!boot.employee?.is_admin;
   // Projekt/Drift på timelinjen (lib/opgaveart.ts): vises, når personen kan vælge både projekter og selskaber.
-  const showArt = companiesForArt("projekt", boot.companies, boot.company_kinds).length > 0 && companiesForArt("drift", boot.companies, boot.company_kinds).length > 0;
-  const hasTaskKinds = boot.task_options.some(o => boot.task_kinds[o]);
+  const artOn = opgaveartEnabled(boot.employee?.id);
+  const showArt = artOn && companiesForArt("projekt", boot.companies, boot.company_kinds).length > 0 && companiesForArt("drift", boot.companies, boot.company_kinds).length > 0;
+  const hasTaskKinds = artOn && boot.task_options.some(o => boot.task_kinds[o]);
   /** Linjens art: valgt selskab/projekt bestemmer; ellers det, der er valgt i Projekt/drift. */
-  const lineArt = (line: AllocLine): Opgaveart | "" => (line.company_id ? artForCompany(boot.company_kinds[Number(line.company_id)]) : "") || line.kind || "";
+  const lineArt = (line: AllocLine): Opgaveart | "" => !artOn ? "" : (line.company_id ? artForCompany(boot.company_kinds[Number(line.company_id)]) : "") || line.kind || "";
   /** Skift af Projekt/drift: selskab/projekt af den anden art nulstilles, og ved Drift også en projektopgavetype. */
   const pickArt = (idx: number, line: AllocLine, art: Opgaveart | "") => updateAlloc(idx, {
     kind: art,

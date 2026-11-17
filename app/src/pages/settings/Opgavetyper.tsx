@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, type SessionEmployee } from "../../lib/api";
 import { FORDELINGSKATEGORIER } from "../../lib/fordelingskategori";
-import { OPGAVEARTER } from "../../lib/opgaveart";
+import { OPGAVEARTER, opgaveartEnabled } from "../../lib/opgaveart";
 import { DEPARTMENTS, SaveAllBar, confirmDiscard, keepDirty, saveDirtyRows, useDirtyRows } from "./shared";
 
 type TaskType = Awaited<ReturnType<typeof api.taskTypesFor>>[number];
@@ -23,6 +23,8 @@ export function Opgavetyper({
 }) {
   // Ikke-admins (ledere) ser kun deres egen afdeling
   const ownDeptOnly = emp && !emp.is_admin;
+  // Projekt/drift er i test (kun Gorm, Morten og Lasse; lib/opgaveart.ts)
+  const artOn = opgaveartEnabled(emp?.id);
   // NOTE(recovery): department kan være null for en leder uden afdeling; sendes uændret videre som i originalen.
   const [dept, setDept] = useState<string>(ownDeptOnly ? emp.department as string : "Marketing");
   const [rows, setRows] = useState<TaskTypeRow[] | null>(null);
@@ -48,7 +50,7 @@ export function Opgavetyper({
       sort: Number(g.sort) || 0,
       active: g.active,
       distribution_category: g.distribution_category || null,
-      task_kind: g.task_kind || null
+      task_kind: artOn ? g.task_kind || null : undefined
     }), flash);
     edits.reset(failed);
     setSaving(false);
@@ -59,11 +61,11 @@ export function Opgavetyper({
     edits.reset();
     api.taskTypesFor(dept).then(list => setRows(list as TaskTypeRow[]));
   };
-  return <div>{ownDeptOnly ? <p className="muted small">Opgavetyper for din afdeling: <b>{dept}</b></p> : <select value={dept} onChange={g => confirmDiscard() && setDept(g.target.value)}>{DEPARTMENTS.map(g => <option key={g}>{g}</option>)}</select>}<table className="datatable admin slim"><thead><tr><th>Opgavetype</th><th title="Styrer, hvilke opgavetyper der kan vælges på en projekt- eller driftslinje i Min tid. Ikke angivet = begge.">Projekt/drift</th><th>Fordelingskategori</th><th className="num">Sortering</th><th>Aktiv</th></tr></thead><tbody>{rows.map(g => <tr className={g.active ? "" : "inaktiv"} key={g.id}><td><input value={g.name} onChange={d => patch(g.id, {
+  return <div>{ownDeptOnly ? <p className="muted small">Opgavetyper for din afdeling: <b>{dept}</b></p> : <select value={dept} onChange={g => confirmDiscard() && setDept(g.target.value)}>{DEPARTMENTS.map(g => <option key={g}>{g}</option>)}</select>}<table className="datatable admin slim"><thead><tr><th>Opgavetype</th>{artOn && <th title="Styrer, hvilke opgavetyper der kan vælges på en projekt- eller driftslinje i Min tid. Ikke angivet = begge.">Projekt/drift</th>}<th>Fordelingskategori</th><th className="num">Sortering</th><th>Aktiv</th></tr></thead><tbody>{rows.map(g => <tr className={g.active ? "" : "inaktiv"} key={g.id}><td><input value={g.name} onChange={d => patch(g.id, {
               name: d.target.value
-            })} /></td><td><select value={g.task_kind || ""} onChange={d => patch(g.id, {
+            })} /></td>{artOn && <td><select value={g.task_kind || ""} onChange={d => patch(g.id, {
               task_kind: d.target.value || null
-            })}><option value="">— ikke angivet —</option>{OPGAVEARTER.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</select></td><td><select value={g.distribution_category || ""} onChange={d => patch(g.id, {
+            })}><option value="">— ikke angivet —</option>{OPGAVEARTER.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</select></td>}<td><select value={g.distribution_category || ""} onChange={d => patch(g.id, {
               distribution_category: d.target.value || null
             })}><option value="">—</option>{FORDELINGSKATEGORIER.map(k => <option key={k}>{k}</option>)}{g.distribution_category && !(FORDELINGSKATEGORIER as readonly string[]).includes(g.distribution_category) && <option>{g.distribution_category}</option>}</select></td><td><input className="hours" value={g.sort} onChange={d => patch(g.id, {
               sort: d.target.value

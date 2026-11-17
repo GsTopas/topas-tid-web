@@ -37,3 +37,12 @@ export function groupTasks(options: string[], taskKinds: Record<string, string>)
   ];
   return groups.filter(g => g.options.length > 0);
 }
+
+/**
+ * Test (Gorm, 17. nov. 2026): Projekt/drift vises indtil videre kun for Gorm Sølvsten Nielsen (1), Morten Kusk (3)
+ * og Lasse Møller (74), dvs. den indloggede bruger. Alle andre har Min tid og Opgavetyper som før.
+ * Slå det til for alle ved at lade `opgaveartEnabled` returnere true.
+ */
+export const OPGAVEART_TESTERS: readonly number[] = [1, 3, 74];
+export const opgaveartEnabled = (employeeId: number | null | undefined): boolean =>
+  employeeId != null && OPGAVEART_TESTERS.includes(employeeId);

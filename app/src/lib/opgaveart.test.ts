@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { artForCompany, companiesForArt, groupTasks, tasksForArt } from "./opgaveart";
+import { artForCompany, companiesForArt, groupTasks, opgaveartEnabled, tasksForArt } from "./opgaveart";
 
 const companies = [{ id: 1, name: "Topas Travel" }, { id: 2, name: "Projekt GL" }, { id: 3, name: "Hotel Icefiord" }];
 const companyKinds = { 1: "selskab", 2: "projekt", 3: "selskab" };
@@ -29,5 +29,10 @@ describe("opgaveart", () => {
       { label: "Øvrige", options: ["GDPR"] },
     ]);
     expect(groupTasks(["GDPR"], {})).toEqual([{ label: "Øvrige", options: ["GDPR"] }]);
+  });
+  it("er kun slået til for testerne", () => {
+    expect(opgaveartEnabled(1)).toBe(true);
+    expect(opgaveartEnabled(2)).toBe(false);
+    expect(opgaveartEnabled(null)).toBe(false);
   });
 });
